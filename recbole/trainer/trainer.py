@@ -27,7 +27,6 @@ import torch
 import torch.optim as optim
 from torch.nn.utils.clip_grad import clip_grad_norm_
 from tqdm import tqdm
-import torch.cuda.amp as amp
 
 from recbole.data.interaction import Interaction
 from recbole.data.dataloader import FullSortEvalDataLoader
@@ -233,7 +232,7 @@ class Trainer(AbstractTrainer):
         if not self.config["single_spec"] and train_data.shuffle:
             train_data.sampler.set_epoch(epoch_idx)
 
-        scaler = amp.GradScaler(enabled=self.enable_scaler)
+        scaler = torch.amp.GradScaler("cuda", enabled=self.enable_scaler)
         for batch_idx, interaction in enumerate(iter_data):
             interaction = interaction.to(self.device)
             self.optimizer.zero_grad()
@@ -1439,7 +1438,7 @@ class NCLTrainer(Trainer):
             if show_progress
             else train_data
         )
-        scaler = amp.GradScaler(enabled=self.enable_scaler)
+        scaler = torch.amp.GradScaler("cuda", enabled=self.enable_scaler)
 
         if not self.config["single_spec"] and train_data.shuffle:
             train_data.sampler.set_epoch(epoch_idx)
@@ -1452,7 +1451,7 @@ class NCLTrainer(Trainer):
                 self.set_reduce_hook()
                 sync_loss = self.sync_grad_loss()
 
-            with amp.autocast(enabled=self.enable_amp):
+            with torch.amp.autocast("cuda", enabled=self.enable_amp):
                 losses = loss_func(interaction)
 
             if isinstance(losses, tuple):

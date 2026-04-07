@@ -1,0 +1,38 @@
+# ====== 模型选择 =======
+model: BPR 
+# ===== 数据集基本信息 =====
+dataset: ml-100k # book, movielen, amazon, mtdata
+data_path: RecBole/dataset/ml-100k  
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: item_id
+# TIME_FIELD: timestamp
+RATING_FIELD: rating
+# ===== 加载控制 =====
+worker: 0
+pin_memory: False
+load_col:
+    inter: [user_id, item_id, timestamp]
+# ===== 过滤规则 =====
+user_inter_num_interval: "[5,inf)"   # 保留至少5次交互的用户
+item_inter_num_interval: "[5,inf)"   # 保留至少5次交互的物品
+# rm_dup_inter: none                   # 去重，保留最后一次交互
+# ===== 时间窗口划分 =====
+eval_args:
+    split: {'TS': [8, 1, 1]}     # TS=时间划分，RS=比例划分，LS=leave-one-out
+    group_by: user
+    order: TO                    # TO=按时间排序，RO=随机
+    mode: full
+# ===== 评估指标 =====
+metrics: ["Recall","MRR","NDCG","Hit","Precision","ItemCoverage", "GiniIndex", "SNIPSRecall","SNIPSNDCG"]  
+topk: [10,20]                    # evaluation metrics.
+valid_metric: NDCG@10            # (str) The evaluation metric for early stopping. 
+# ===== 训练参数 =====
+epochs: 300
+train_batch_size: 2048
+eval_batch_size: 4096
+learning_rate: 0.001
+stopping_step: 10 
+# ===== 运行控制 =====
+gpu_id: 0,1 
+
+# python run_recbole.py --config_files my_config.yaml --nproc=2

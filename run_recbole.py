@@ -10,6 +10,8 @@
 import argparse
 
 from recbole.quick_start import run
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

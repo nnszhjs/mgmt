@@ -77,7 +77,7 @@ class Config(object):
             config_file_list (list of str): the external config file, it allows multiple config files, default is None.
             config_dict (dict): the external parameter dictionaries, default is None.
         """
-        self.compatibility_settings()
+        # self.compatibility_settings() for Numpy 1.x
         self._init_parameters_category()
         self.yaml_loader = self._build_yaml_loader()
         self.file_config_dict = self._load_config_files(config_file_list)
@@ -639,6 +639,7 @@ class Config(object):
         if not hasattr(np, 'str'):
             np.str = np.str_
         if not hasattr(np, 'long'):
-            np.long = np.intp
+            np.int64 = np.intp
         if not hasattr(np, 'unicode'):
             np.unicode = np.str_
+            
