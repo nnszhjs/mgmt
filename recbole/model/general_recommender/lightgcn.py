@@ -108,7 +108,7 @@ class LightGCN(GeneralRecommender):
                 )
             )
         )
-        A._update(data_dict)
+        A.update(data_dict)
         # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
         # add epsilon to avoid divide by zero Warning
@@ -122,7 +122,7 @@ class LightGCN(GeneralRecommender):
         col = L.col
         i = torch.LongTensor(np.array([row, col]))
         data = torch.FloatTensor(L.data)
-        SparseL = torch.sparse.FloatTensor(i, data, torch.Size(L.shape))
+        SparseL = torch.sparse_coo_tensor(i, data, torch.Size(L.shape))
         return SparseL
 
     def get_ego_embeddings(self):
@@ -141,7 +141,8 @@ class LightGCN(GeneralRecommender):
         embeddings_list = [all_embeddings]
 
         for layer_idx in range(self.n_layers):
-            all_embeddings = torch.sparse.mm(self.norm_adj_matrix, all_embeddings)
+            all_embeddings = torch.sparse.mm(self.norm_adj_matrix, 
+            all_embeddings)
             embeddings_list.append(all_embeddings)
         lightgcn_all_embeddings = torch.stack(embeddings_list, dim=1)
         lightgcn_all_embeddings = torch.mean(lightgcn_all_embeddings, dim=1)

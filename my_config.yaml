@@ -1,15 +1,15 @@
 # ====== 模型选择 =======
-model: BPR 
+model: SASRec
 # ===== 数据集基本信息 =====
-dataset: ml-100k # book, movielen, amazon, mtdata
-data_path: RecBole/dataset/ml-100k  
+dataset: book # book, movielen, amazon, mtdata
+data_path: RecBole/dataset/
 USER_ID_FIELD: user_id
 ITEM_ID_FIELD: item_id
 # TIME_FIELD: timestamp
 RATING_FIELD: rating
 # ===== 加载控制 =====
 worker: 0
-pin_memory: False
+pin_memory: True
 load_col:
     inter: [user_id, item_id, timestamp]
 # ===== 过滤规则 =====

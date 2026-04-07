@@ -1,1 +1,1 @@
-python run_recbole.py --config_files my_config.yaml --nproc=2 
+python run_recbole.py --model LightGCN --dataset amazon --nproc=2
