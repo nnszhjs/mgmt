@@ -485,31 +485,53 @@ class Config(object):
         import torch
 
         if "local_rank" not in self.final_config_dict:
-            self.final_config_dict["single_spec"] = True
-            self.final_config_dict["local_rank"] = 0
-            self.final_config_dict["device"] = (
-                torch.device("cpu")
-                if len(gpu_id) == 0 or not torch.cuda.is_available()
-                else torch.device("cuda")
-            )
+            if (
+                "LOCAL_RANK" in os.environ
+                and "RANK" in os.environ
+                and "WORLD_SIZE" in os.environ
+            ):
+                self.final_config_dict["local_rank"] = int(os.environ["LOCAL_RANK"])
+                self.final_config_dict["rank"] = int(os.environ["RANK"])
+                self.final_config_dict["world_size"] = int(os.environ["WORLD_SIZE"])
+                self.final_config_dict["single_spec"] = False
+                torch.cuda.set_device(self.final_config_dict["local_rank"])
+                self.final_config_dict["device"] = torch.device(
+                    "cuda", self.final_config_dict["local_rank"]
+                )
+                torch.distributed.init_process_group(
+                    backend="nccl",
+                    init_method="env://",
+                )
+                if self.final_config_dict["local_rank"] != 0:
+                    self.final_config_dict["state"] = "error"
+                    self.final_config_dict["show_progress"] = False
+                    self.final_config_dict["verbose"] = False
+            else:
+                self.final_config_dict["single_spec"] = True
+                self.final_config_dict["local_rank"] = 0
+                self.final_config_dict["device"] = (
+                    torch.device("cpu")
+                    if len(gpu_id) == 0 or not torch.cuda.is_available()
+                    else torch.device("cuda")
+                )
         else:
-            assert len(gpu_id.split(",")) >= self.final_config_dict["nproc"]
+            if len(gpu_id.split(",")) < self.final_config_dict.get("nproc", 1):
+                raise ValueError(
+                    f"Insufficient GPUs: gpu_id={gpu_id!r} has {len(gpu_id.split(','))} GPUs but nproc={self.final_config_dict.get('nproc', 1)}"
+                )
+            local_rank = int(os.environ["LOCAL_RANK"])
+            rank = int(os.environ["RANK"])
+            world_size = int(os.environ["WORLD_SIZE"])
             torch.distributed.init_process_group(
                 backend="nccl",
-                rank=self.final_config_dict["local_rank"]
-                + self.final_config_dict["offset"],
-                world_size=self.final_config_dict["world_size"],
-                init_method="tcp://"
-                + self.final_config_dict["ip"]
-                + ":"
-                + str(self.final_config_dict["port"]),
+                rank=rank + self.final_config_dict["offset"],
+                world_size=world_size,
+                init_method="env://",
             )
-            self.final_config_dict["device"] = torch.device(
-                "cuda", self.final_config_dict["local_rank"]
-            )
+            self.final_config_dict["device"] = torch.device("cuda", local_rank)
             self.final_config_dict["single_spec"] = False
-            torch.cuda.set_device(self.final_config_dict["local_rank"])
-            if self.final_config_dict["local_rank"] != 0:
+            torch.cuda.set_device(local_rank)
+            if local_rank != 0:
                 self.final_config_dict["state"] = "error"
                 self.final_config_dict["show_progress"] = False
                 self.final_config_dict["verbose"] = False
@@ -624,22 +646,22 @@ class Config(object):
 
     def compatibility_settings(self):
         import numpy as np
+
         # NumPy 2.0+ Compatibility Patch
         # 将旧版别名映射到现代 NumPy 类型
-        if not hasattr(np, 'float'):
+        if not hasattr(np, "float"):
             np.float = np.float64
-        if not hasattr(np, 'int'):
+        if not hasattr(np, "int"):
             np.int = np.intp
-        if not hasattr(np, 'bool'):
+        if not hasattr(np, "bool"):
             np.bool = np.bool_
-        if not hasattr(np, 'complex'):
+        if not hasattr(np, "complex"):
             np.complex = np.complex128
-        if not hasattr(np, 'object'):
+        if not hasattr(np, "object"):
             np.object = np.object_
-        if not hasattr(np, 'str'):
+        if not hasattr(np, "str"):
             np.str = np.str_
-        if not hasattr(np, 'long'):
+        if not hasattr(np, "long"):
             np.int64 = np.intp
-        if not hasattr(np, 'unicode'):
+        if not hasattr(np, "unicode"):
             np.unicode = np.str_
-            

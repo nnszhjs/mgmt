@@ -11,9 +11,10 @@
 recbole.quick_start
 ########################
 """
+
 import logging
+import os
 import sys
-import torch.distributed as dist
 from collections.abc import MutableMapping
 from logging import getLogger
 
@@ -48,6 +49,22 @@ def run(
     port="5678",
     group_offset=0,
 ):
+    # torchrun path: each process is launched separately, just call run_recbole() directly
+    if (
+        "LOCAL_RANK" in os.environ
+        and "RANK" in os.environ
+        and "WORLD_SIZE" in os.environ
+    ):
+        res = run_recbole(
+            model=model,
+            dataset=dataset,
+            config_file_list=config_file_list,
+            config_dict=config_dict,
+            saved=saved,
+        )
+        return res
+
+    # Single-GPU path
     if nproc == 1 and world_size <= 0:
         res = run_recbole(
             model=model,
@@ -57,38 +74,10 @@ def run(
             saved=saved,
         )
     else:
-        if world_size == -1:
-            world_size = nproc
-        import torch.multiprocessing as mp
-
-        # Refer to https://discuss.pytorch.org/t/problems-with-torch-multiprocess-spawn-and-simplequeue/69674/2
-        # https://discuss.pytorch.org/t/return-from-mp-spawn/94302/2
-        queue = mp.get_context("spawn").SimpleQueue()
-
-        config_dict = config_dict or {}
-        config_dict.update(
-            {
-                "world_size": world_size,
-                "ip": ip,
-                "port": port,
-                "nproc": nproc,
-                "offset": group_offset,
-            }
+        raise ValueError(
+            "Multi-GPU training now requires torchrun. "
+            "Use: torchrun --nproc_per_node=N run_recbole.py ..."
         )
-        kwargs = {
-            "config_dict": config_dict,
-            "queue": queue,
-        }
-
-        mp.spawn(
-            run_recboles,
-            args=(model, dataset, config_file_list, kwargs),
-            nprocs=nproc,
-            join=True,
-        )
-
-        # Normally, there should be only one item in the queue
-        res = None if queue.empty() else queue.get()
     return res
 
 
@@ -179,20 +168,6 @@ def run_recbole(
     return result  # for the single process
 
 
-def run_recboles(rank, *args):
-    kwargs = args[-1]
-    if not isinstance(kwargs, MutableMapping):
-        raise ValueError(
-            f"The last argument of run_recboles should be a dict, but got {type(kwargs)}"
-        )
-    kwargs["config_dict"] = kwargs.get("config_dict", {})
-    kwargs["config_dict"]["local_rank"] = rank
-    run_recbole(
-        *args[:3],
-        **kwargs,
-    )
-
-
 def objective_function(config_dict=None, config_file_list=None, saved=True):
     r"""The default objective_function used in HyperTuning
 
@@ -220,6 +195,7 @@ def objective_function(config_dict=None, config_file_list=None, saved=True):
     )
     test_result = trainer.evaluate(test_data, load_best_model=saved)
     from ray import tune
+
     tune.report(**test_result)
     return {
         "model": model_name,
