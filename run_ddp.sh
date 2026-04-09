@@ -2,8 +2,8 @@
 # Multi-GPU training using torchrun
 
 GPUS=${1:-2}
-MODEL=${2:-LightGCN}
-DATASET=${3:-amazon}
+MODEL=${2:-MECoDGNN}
+DATASET=${3:-movielen}
 CONFIG_FILES=${4:-}
 
 torchrun \
