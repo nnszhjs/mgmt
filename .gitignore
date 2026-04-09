@@ -13,3 +13,4 @@ saved/
 docs/build/
 wandb/*
 /ray_log*
+paper_full.md

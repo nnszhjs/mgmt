@@ -160,6 +160,7 @@ def run_recbole(
     }
 
     if not config["single_spec"]:
+        import torch.distributed as dist
         dist.destroy_process_group()
 
     if config["local_rank"] == 0 and queue is not None:

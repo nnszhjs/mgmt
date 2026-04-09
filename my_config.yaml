@@ -34,5 +34,3 @@ learning_rate: 0.001
 stopping_step: 10 
 # ===== 运行控制 =====
 gpu_id: 0,1 
-
-# python run_recbole.py --config_files my_config.yaml --nproc=2

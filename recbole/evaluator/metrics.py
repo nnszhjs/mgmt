@@ -690,6 +690,88 @@ class GiniIndex(AbstractMetric):
         return gini_index
 
 
+class GiniExposure(AbstractMetric):
+    r"""GiniExposure measures the inequality of item exposure in the recommendation output.
+
+    Unlike :class:`GiniIndex`, which pads zero-exposure items up to the full catalog size
+    (causing values to cluster near 1.0 for large catalogs), GiniExposure computes the
+    coefficient only over items that actually appear in the recommendation lists. This
+    matches the evaluation protocol in:
+
+        "Diversifying Recommendations on Digital Platforms: A Dynamic Graph Neural Network
+        Approach" (MECo-DGNN), where the Gini coefficient is reported in the range 0.8–0.9.
+
+    .. math::
+        \mathrm{GiniExposure@K} =
+        \frac{\sum_{v_i, v_j \in \hat{V}} |f(v_i) - f(v_j)|}
+             {2 \, |\hat{V}| \sum_{v \in \hat{V}} f(v)}
+
+    :math:`\hat{V}` is the set of **distinct items that appear at least once** in the top-K
+    recommendation lists, and :math:`f(v)` is the number of times item :math:`v` appears
+    across all users' recommendation lists.
+
+    Using the equivalent sorted-list form for O(n log n) computation:
+
+    .. math::
+        \mathrm{GiniExposure@K} =
+        \frac{\sum_{i=1}^{|\hat{V}|} (2i - |\hat{V}| - 1) \, P_{(i)}}
+             {|\hat{V}| \sum_{i=1}^{|\hat{V}|} P_{(i)}}
+
+    where :math:`P_{(i)}` is the i-th smallest exposure count (non-decreasing order).
+
+    A lower value indicates more balanced exposure among recommended items.
+    """
+
+    metric_type = EvaluatorType.RANKING
+    smaller = True
+    metric_need = ["rec.items"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.topk = config["topk"]
+
+    def used_info(self, dataobject):
+        """Get the matrix of recommendation items."""
+        item_matrix = dataobject.get("rec.items")
+        return item_matrix.numpy()
+
+    def calculate_metric(self, dataobject):
+        item_matrix = self.used_info(dataobject)
+        metric_dict = {}
+        for k in self.topk:
+            key = "{}@{}".format("giniexposure", k)
+            metric_dict[key] = round(
+                self.get_gini_exposure(item_matrix[:, :k]), self.decimal_place
+            )
+        return metric_dict
+
+    def get_gini_exposure(self, item_matrix):
+        """Compute the Gini coefficient over exposure counts of recommended items.
+
+        Only items that appear at least once in the recommendation lists are included.
+        This avoids the near-1.0 inflation caused by the many zero-exposure items in a
+        large catalog, producing interpretable values in the range [0, 1).
+
+        Args:
+            item_matrix (numpy.ndarray): shape (n_users, K), recommended item IDs.
+
+        Returns:
+            float: GiniExposure value in [0, 1). Lower is more equal.
+        """
+        item_count = Counter(item_matrix.flatten())
+        # Sort exposure counts in non-decreasing order: P_(1) <= P_(2) <= ... <= P_(|V̂|)
+        sorted_counts = np.array(sorted(item_count.values()), dtype=np.float64)
+        n = len(sorted_counts)           # number of distinct recommended items |V̂|
+        total = sorted_counts.sum()      # Σ f(v)
+        if n == 0 or total == 0:
+            return 0.0
+        # Sorted-list Gini: Σ_i (2i - n - 1) * P_(i)  /  (n * Σ P_(i))
+        # idx runs from 1 to n (1-indexed rank)
+        idx = np.arange(1, n + 1, dtype=np.float64)
+        gini = np.sum((2 * idx - n - 1) * sorted_counts) / (n * total)
+        return float(gini)
+
+
 class TailPercentage(AbstractMetric):
     r"""TailPercentage_ computes the percentage of long-tail items in recommendation items.
 
