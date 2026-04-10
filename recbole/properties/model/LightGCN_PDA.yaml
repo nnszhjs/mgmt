@@ -1,0 +1,6 @@
+# LightGCN_PDA: LightGCN + Popularity-bias Deconfounding and Adjusting
+# Inherits all LightGCN parameters, adds pda_weight.
+embedding_size: 64     # (int) The embedding size of users and items.
+n_layers: 2            # (int) The number of layers in LightGCN.
+reg_weight: 1e-05      # (float) The L2 regularization weight.
+pda_weight: 1.0        # (float) Weight of the popularity BPR loss term.

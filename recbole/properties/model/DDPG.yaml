@@ -1,0 +1,10 @@
+# DDPG (Deep Deterministic Policy Gradient) Hyperparameters
+# Reference: Lillicrap et al. "Continuous Control with Deep Reinforcement Learning." ICLR 2016.
+
+embedding_size: 64          # (int) Embedding dimension for items and action space.
+actor_hidden_size: 128      # (int) Hidden dimension of the actor MLP.
+critic_hidden_size: 128     # (int) Hidden dimension of the critic MLP.
+tau: 0.001                  # (float) Soft target update rate (Polyak averaging coefficient).
+gamma: 0.0                  # (float) Discount factor for TD target. 0 = no bootstrapping (single-step).
+ou_sigma: 0.2               # (float) Ornstein-Uhlenbeck noise standard deviation.
+ou_theta: 0.15              # (float) Ornstein-Uhlenbeck noise mean-reversion speed.

@@ -1,0 +1,4 @@
+# BPR_PDA: BPR + Popularity-bias Deconfounding and Adjusting
+# Inherits all BPR parameters, adds pda_weight.
+embedding_size: 64     # (int) The embedding size of users and items.
+pda_weight: 1.0        # (float) Weight of the popularity BPR loss term.

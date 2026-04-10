@@ -1,0 +1,13 @@
+# SASRec_PC: SASRec + Popularity Compensation
+# Inherits all SASRec parameters, adds pc_lambda.
+n_layers: 2                     # (int) The number of transformer layers.
+n_heads: 2                      # (int) The number of attention heads.
+hidden_size: 64                 # (int) The hidden state size.
+inner_size: 256                 # (int) The inner hidden size in feed-forward layer.
+hidden_dropout_prob: 0.5        # (float) Dropout probability.
+attn_dropout_prob: 0.5          # (float) Attention dropout probability.
+hidden_act: 'gelu'              # (str) Activation function in feed-forward layer.
+layer_norm_eps: 1e-12           # (float) Layer norm epsilon.
+initializer_range: 0.02         # (float) Std for normal initialization.
+loss_type: 'CE'                 # (str) Loss function type ['BPR', 'CE'].
+pc_lambda: 1.0                  # (float) Weight of log-popularity penalty at inference.

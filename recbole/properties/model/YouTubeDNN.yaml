@@ -1,0 +1,6 @@
+# YouTubeDNN Hyperparameters
+# Reference: Covington et al. "Deep Neural Networks for YouTube Recommendations." RecSys 2016.
+
+embedding_size: 64              # (int) Embedding dimension for users and items.
+mlp_hidden_size: [256, 128, 64] # (list[int]) Hidden layer sizes of the user tower MLP.
+dropout_prob: 0.0               # (float) Dropout probability in the user tower MLP. 0 = no dropout.

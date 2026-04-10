@@ -1,0 +1,11 @@
+# DyGCN Hyperparameters
+# Reference: "Diversifying Recommendations on Digital Platforms: A Dynamic Graph Neural Network Approach"
+# DyGCN is the MECo-DGNN backbone without Matthew Effect control modules.
+
+embedding_size: 64      # (int) Embedding dimension d for users and items.
+n_layers: 2             # (int) Number of GNN propagation layers L.
+n_time_steps: 4         # (int) Number of temporal graph snapshots T.
+lstm_hidden: 64         # (int) LSTM hidden state dimension. Set equal to embedding_size by default.
+mlp_hidden: 128         # (int) Hidden dimension of the GNN MLP update function f().
+use_compile: True       # (bool) Apply torch.compile to gnn_mlp (requires PyTorch>=2.0).
+use_tf32: True          # (bool) Enable TF32 matmul precision on Ampere+ GPUs.

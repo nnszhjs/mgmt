@@ -1,0 +1,6 @@
+# ComiRec-DR Hyperparameters
+# Reference: "Controllable Multi-Interest Framework for Recommendation" (Cen et al., KDD 2020)
+embedding_size: 64
+n_interests: 4
+n_iterations: 3
+loss_type: 'BPR'

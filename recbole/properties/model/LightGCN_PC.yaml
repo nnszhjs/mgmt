@@ -1,0 +1,6 @@
+# LightGCN_PC: LightGCN + Popularity Compensation
+# Inherits all LightGCN parameters, adds pc_lambda.
+embedding_size: 64     # (int) The embedding size of users and items.
+n_layers: 2            # (int) The number of layers in LightGCN.
+reg_weight: 1e-05      # (float) The L2 regularization weight.
+pc_lambda: 1.0         # (float) Weight of log-popularity penalty at inference.

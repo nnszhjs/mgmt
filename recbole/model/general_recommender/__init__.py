@@ -32,3 +32,10 @@ from recbole.model.general_recommender.simplex import SimpleX
 from recbole.model.general_recommender.diffrec import DiffRec
 from recbole.model.general_recommender.ldiffrec import LDiffRec
 from recbole.model.general_recommender.mecodgnn import MECoDGNN
+from recbole.model.general_recommender.dygcn import DyGCN
+from recbole.model.general_recommender.ddpg import DDPG
+from recbole.model.general_recommender.youtubednn import YouTubeDNN
+from recbole.model.general_recommender.bpr_pc import BPR_PC
+from recbole.model.general_recommender.bpr_pda import BPR_PDA
+from recbole.model.general_recommender.lightgcn_pc import LightGCN_PC
+from recbole.model.general_recommender.lightgcn_pda import LightGCN_PDA
