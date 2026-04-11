@@ -14,3 +14,4 @@ docs/build/
 wandb/*
 /ray_log*
 paper_full.md
+benchmark_results/
