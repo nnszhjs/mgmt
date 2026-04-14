@@ -244,7 +244,15 @@ class Trainer(AbstractTrainer):
             with torch.autocast(device_type=self.device.type, enabled=self.enable_amp):
                 losses = loss_func(interaction)
 
-            if isinstance(losses, tuple):
+            if isinstance(losses, dict):
+                # Dict mode: 'loss' key is the backward loss; other keys are logged components.
+                loss = losses["loss"]
+                loss_dict = {k: v.item() if torch.is_tensor(v) else v for k, v in losses.items()}
+                if total_loss is None:
+                    total_loss = loss_dict
+                else:
+                    total_loss = {k: total_loss.get(k, 0) + loss_dict.get(k, 0) for k in loss_dict}
+            elif isinstance(losses, tuple):
                 loss = sum(losses)
                 loss_tuple = tuple(per_loss.item() for per_loss in losses)
                 total_loss = (
@@ -353,7 +361,13 @@ class Trainer(AbstractTrainer):
             + set_color("time", "blue")
             + ": %.2fs, "
         ) % (epoch_idx, e_time - s_time)
-        if isinstance(losses, tuple):
+        if isinstance(losses, dict):
+            fmt = "%." + str(des) + "f"
+            parts = []
+            for k, v in losses.items():
+                parts.append(set_color(k, "blue") + ": " + fmt % v)
+            train_loss_output += ", ".join(parts)
+        elif isinstance(losses, tuple):
             des = set_color("train_loss%d", "blue") + ": %." + str(des) + "f"
             train_loss_output += ", ".join(
                 des % (idx + 1, loss) for idx, loss in enumerate(losses)
@@ -364,7 +378,10 @@ class Trainer(AbstractTrainer):
         return train_loss_output + "]"
 
     def _add_train_loss_to_tensorboard(self, epoch_idx, losses, tag="Loss/Train"):
-        if isinstance(losses, tuple):
+        if isinstance(losses, dict):
+            for k, v in losses.items():
+                self.tensorboard.add_scalar(tag + "/" + k, v, epoch_idx)
+        elif isinstance(losses, tuple):
             for idx, loss in enumerate(losses):
                 self.tensorboard.add_scalar(tag + str(idx), loss, epoch_idx)
         else:
@@ -440,7 +457,9 @@ class Trainer(AbstractTrainer):
                 train_data, epoch_idx, show_progress=show_progress
             )
             self.train_loss_dict[epoch_idx] = (
-                sum(train_loss) if isinstance(train_loss, tuple) else train_loss
+                sum(train_loss) if isinstance(train_loss, tuple)
+                else train_loss["loss"] if isinstance(train_loss, dict)
+                else train_loss
             )
             training_end_time = time()
             train_loss_output = self._generate_train_loss_output(
@@ -779,7 +798,9 @@ class PretrainTrainer(Trainer):
                 train_data, epoch_idx, show_progress=show_progress
             )
             self.train_loss_dict[epoch_idx] = (
-                sum(train_loss) if isinstance(train_loss, tuple) else train_loss
+                sum(train_loss) if isinstance(train_loss, tuple)
+                else train_loss["loss"] if isinstance(train_loss, dict)
+                else train_loss
             )
             training_end_time = time()
             train_loss_output = self._generate_train_loss_output(
@@ -1332,7 +1353,9 @@ class NCLTrainer(Trainer):
                 train_data, epoch_idx, show_progress=show_progress
             )
             self.train_loss_dict[epoch_idx] = (
-                sum(train_loss) if isinstance(train_loss, tuple) else train_loss
+                sum(train_loss) if isinstance(train_loss, tuple)
+                else train_loss["loss"] if isinstance(train_loss, dict)
+                else train_loss
             )
             training_end_time = time()
             train_loss_output = self._generate_train_loss_output(
@@ -1454,7 +1477,14 @@ class NCLTrainer(Trainer):
             with torch.amp.autocast("cuda", enabled=self.enable_amp):
                 losses = loss_func(interaction)
 
-            if isinstance(losses, tuple):
+            if isinstance(losses, dict):
+                loss = losses["loss"]
+                loss_dict = {k: v.item() if torch.is_tensor(v) else v for k, v in losses.items()}
+                if total_loss is None:
+                    total_loss = loss_dict
+                else:
+                    total_loss = {k: total_loss.get(k, 0) + loss_dict.get(k, 0) for k in loss_dict}
+            elif isinstance(losses, tuple):
                 if epoch_idx < self.config["warm_up_step"]:
                     losses = losses[:-1]
                 loss = sum(losses)

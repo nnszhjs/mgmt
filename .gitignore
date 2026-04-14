@@ -13,5 +13,6 @@ saved/
 docs/build/
 wandb/*
 /ray_log*
+MgmtSci__Controlling_the_Matthew_Effect.pdf
 paper_full.md
 benchmark_results/

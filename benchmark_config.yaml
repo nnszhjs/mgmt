@@ -1,0 +1,46 @@
+# ==========================================================================
+#  benchmark_config.yaml - 新的滑动窗口benchmark配置
+# ==========================================================================
+
+# 滑动窗口参数
+temporal_sliding_window:
+  window_size: 1.0      
+  rounds: 1          
+
+eval_args:
+  # 一般推荐模型使用TS (Time-based Splitting)
+  split: {'TS': [0.8, 0.1, 0.1]}
+  group_by: user
+  order: TO
+  mode: full
+
+# 序列推荐模型可以使用LS (Leave-one-out)
+# eval_args:
+#   split: {'LS': 'valid_and_test'}
+#   group_by: user
+#   order: TO
+#   mode: full
+
+# 随机种子
+seeds: [2022] #, 2023, 2024, 2025, 2026]
+
+# 模型列表
+models:
+  - BPR
+  - LightGCN
+  - SASRec
+  - MECoDGNN
+
+# 数据集列表
+datasets:
+  - book
+
+# GPU配置
+nproc_per_node: 2       # 每个训练任务使用的GPU数量
+
+# 其他配置
+output_dir: benchmark_results
+skip_existing: true
+max_run_timeout: 7200   # 2小时超时
+
+

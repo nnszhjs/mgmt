@@ -18,8 +18,6 @@ import sys
 from collections.abc import MutableMapping
 from logging import getLogger
 
-# from ray import tune
-
 from recbole.config import Config
 from recbole.data import (
     create_dataset,
@@ -37,60 +35,20 @@ from recbole.utils import (
 )
 
 
-def run(
-    model,
-    dataset,
-    config_file_list=None,
-    config_dict=None,
-    saved=True,
-    nproc=1,
-    world_size=-1,
-    ip="localhost",
-    port="5678",
-    group_offset=0,
-):
-    # torchrun path: each process is launched separately, just call run_recbole() directly
-    if (
-        "LOCAL_RANK" in os.environ
-        and "RANK" in os.environ
-        and "WORLD_SIZE" in os.environ
-    ):
-        res = run_recbole(
-            model=model,
-            dataset=dataset,
-            config_file_list=config_file_list,
-            config_dict=config_dict,
-            saved=saved,
-        )
-        return res
-
-    # Single-GPU path
-    if nproc == 1 and world_size <= 0:
-        res = run_recbole(
-            model=model,
-            dataset=dataset,
-            config_file_list=config_file_list,
-            config_dict=config_dict,
-            saved=saved,
-        )
-    else:
-        raise ValueError(
-            "Multi-GPU training now requires torchrun. "
-            "Use: torchrun --nproc_per_node=N run_recbole.py ..."
-        )
-    return res
-
-
 def run_recbole(
     model=None,
     dataset=None,
     config_file_list=None,
     config_dict=None,
     saved=True,
-    queue=None,
 ):
     r"""A fast running api, which includes the complete process of
-    training and testing a model on a specified dataset
+    training and testing a model on a specified dataset.
+
+    Launch via ``torchrun`` for both single-GPU and multi-GPU::
+
+        torchrun --nproc_per_node=1 run_recbole.py --model=BPR --dataset=book
+        torchrun --nproc_per_node=4 run_recbole.py --model=BPR --dataset=book
 
     Args:
         model (str, optional): Model name. Defaults to ``None``.
@@ -98,7 +56,6 @@ def run_recbole(
         config_file_list (list, optional): Config files used to modify experiment parameters. Defaults to ``None``.
         config_dict (dict, optional): Parameters dictionary used to modify experiment parameters. Defaults to ``None``.
         saved (bool, optional): Whether to save the model. Defaults to ``True``.
-        queue (torch.multiprocessing.Queue, optional): The queue used to pass the result to the main process. Defaults to ``None``.
     """
     # configurations initialization
     config = Config(
@@ -163,10 +120,7 @@ def run_recbole(
         import torch.distributed as dist
         dist.destroy_process_group()
 
-    if config["local_rank"] == 0 and queue is not None:
-        queue.put(result)  # for multiprocessing, e.g., mp.spawn
-
-    return result  # for the single process
+    return result
 
 
 def objective_function(config_dict=None, config_file_list=None, saved=True):

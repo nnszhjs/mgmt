@@ -1,25 +1,38 @@
 # MECo-DGNN Hyperparameters
 # Reference: "Diversifying Recommendations on Digital Platforms: A Dynamic Graph Neural Network Approach"
 
+# --- Architecture ---
 embedding_size: 64      # (int) Embedding dimension d for users and items.
 n_layers: 2             # (int) Number of GNN propagation layers L.
-n_time_steps: 4         # (int) Number of temporal graph snapshots T (e.g., 4 weeks → predict week 5).
-lstm_hidden: 64         # (int) LSTM hidden state dimension. Set equal to embedding_size by default.
+n_time_steps: 4         # (int) Number of temporal graph snapshots T.
+lstm_hidden: 64         # (int) Hidden dimension for LSTM/RNN temporal module.
 mlp_hidden: 128         # (int) Hidden dimension of the GNN MLP update function f().
-n_groups: 50            # (int) Number of item groups Q for Lorenz-curve binning.
-alpha: 1.0e-5           # (float) Weight for Stage Degree Regularization loss L_reg.
-beta: 100.0             # (float) Weight for Matthew Effect Regularization loss L_mat.
-gini_target: 0.75       # (float) Target Gini coefficient. Lower values → more diversity.
+temporal_agg: lstm      # (str) Temporal aggregation method. Options:
+                        #   "lstm"  - LSTM, takes last hidden state (paper default).
+                        #   "rnn"   - Vanilla RNN (tanh), fewer params, less overfitting on short T.
+                        #   "mean"  - Mean pooling over T steps (0 params, strong baseline).
+                        #   "attn"  - Self-attention with learnable positional embeddings.
+
+# --- Dynamic Graph ---
+cumulative_graph: True  # (bool) True=cumulative snapshots, False=independent incremental snapshots (default).
+
+# --- Diversity & Regularization ---
+n_groups: 10            # (int) Number of item groups Q for Lorenz-curve binning.
+alpha: 0.01             # (float) Weight for Stage Degree Regularization loss L_reg.
+                        #         All losses use mean reduction, so alpha stays moderate.
+beta: 10.0               # (float) Weight for Matthew Effect Regularization loss L_mat.
+                        #         All losses use mean reduction, so beta stays moderate.
+gini_target: 0.7        # (float) Target Gini coefficient. Lower values -> more diversity.
                         #         Typical values: 0.0 (perfect equality) to 0.9 (concentrated).
-                        #         Set based on historical Gini evolution or managerial objectives.
-mat_users: 512          # (int) Number of users sampled to estimate item degree in L_mat.
-mat_items: 1000         # (int) Number of items sampled in L_mat. Caps peak tensor to ~8 MB.
-mat_freq: 1             # (int) Compute L_mat every N batches. N=1 = every batch (exact);
-                        #       N>1 caches and reuses the previous value between computations,
-                        #       trading slight approximation for significant speed gains.
+reg_weight: 0.00001     # (float) Weight for L2 embedding regularization loss.
+
+# --- Matthew Effect Sampling ---
+mat_users: 2048         # (int) Users sampled to estimate item degree in Matthew Effect loss.
+mat_items: 4096         # (int) Items sampled in Matthew Effect loss.
+mat_freq: 1             # (int) Compute L_mat every N batches. 1 = every batch.
+
+# --- Performance ---
 use_compile: True       # (bool) Apply torch.compile to gnn_mlp and mat_ffnn (requires PyTorch>=2.0).
                         #        Silently skipped on older PyTorch versions.
 use_tf32: True          # (bool) Enable TF32 matmul precision on Ampere+ GPUs (A100/RTX30xx+).
-                        #        Uses Tensor Cores for dense matmul: ~1.5–3x speedup on MLP layers.
                         #        Calls torch.set_float32_matmul_precision("high"). No-op on pre-Ampere.
-                        #        Safe for recommendation: BPR loss depends only on relative ordering.

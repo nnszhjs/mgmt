@@ -75,6 +75,7 @@ class Collector(object):
         self.full = "full" in config["eval_args"]["mode"]
         self.topk = self.config["topk"]
         self.device = self.config["device"]
+        self._rec_user_count = 0
 
     def data_collect(self, train_data):
         """Collect the evaluation resource from training data.
@@ -156,6 +157,17 @@ class Collector(object):
             )  # n_users x k
             self.data_struct.update_tensor("rec.items", topk_idx)
 
+        if (
+            (self.register.need("rec.pos_u") or self.register.need("rec.pos_i"))
+            and positive_u is not None
+            and positive_i is not None
+        ):
+            # Store the full positive-item set for each evaluated user so that
+            # inverse-propensity metrics can normalize against the user's actual
+            # relevant items instead of only the top-k hit mask.
+            self.data_struct.update_tensor("rec.pos_u", positive_u + self._rec_user_count)
+            self.data_struct.update_tensor("rec.pos_i", positive_i)
+
         if self.register.need("rec.topk"):
 
             _, topk_idx = torch.topk(
@@ -197,6 +209,8 @@ class Collector(object):
                 "data.label", interaction[self.label_field].to(self.device)
             )
 
+        self._rec_user_count += scores_tensor.size(0)
+
     def model_collect(self, model: torch.nn.Module):
         """Collect the evaluation resource from model.
         Args:
@@ -230,7 +244,16 @@ class Collector(object):
                 self.data_struct._data_dict[key] = value.cpu()
         
         returned_struct = copy.deepcopy(self.data_struct)
-        for key in ["rec.topk", "rec.meanrank", "rec.score", "rec.items", "data.label"]:
+        for key in [
+            "rec.topk",
+            "rec.meanrank",
+            "rec.score",
+            "rec.items",
+            "rec.pos_u",
+            "rec.pos_i",
+            "data.label",
+        ]:
             if key in self.data_struct:
                 del self.data_struct[key]
+        self._rec_user_count = 0
         return returned_struct

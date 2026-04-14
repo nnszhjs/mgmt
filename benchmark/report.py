@@ -10,6 +10,7 @@ Aggregate benchmark results from the SQLite database and generate:
 3. Both "seed-first" and "flat" aggregation views.
 """
 
+import csv
 import os
 from collections import defaultdict
 from logging import getLogger
@@ -40,8 +41,10 @@ def _aggregate(
         {
             "flat_mean": float,     # mean over all (round, seed) runs
             "flat_std":  float,
+            "flat_ci95": float,     # 95% confidence interval half-width
             "per_round_mean": float,  # mean of per-round means
             "per_round_std":  float,  # std  of per-round means
+            "per_round_ci95": float,
             "n_runs": int,
             "per_round": {round_idx: {"mean": float, "std": float}},
         }
@@ -63,6 +66,7 @@ def _aggregate(
         all_vals = [v for vals in round_dict.values() for v in vals]
         flat_mean = float(np.mean(all_vals))
         flat_std = float(np.std(all_vals, ddof=1)) if len(all_vals) > 1 else 0.0
+        flat_ci95 = _ci95(all_vals)
 
         # Per-round aggregation
         round_means = []
@@ -76,16 +80,36 @@ def _aggregate(
 
         pr_mean = float(np.mean(round_means))
         pr_std = float(np.std(round_means, ddof=1)) if len(round_means) > 1 else 0.0
+        pr_ci95 = _ci95(round_means)
 
         result[metric] = {
             "flat_mean": flat_mean,
             "flat_std": flat_std,
+            "flat_ci95": flat_ci95,
             "per_round_mean": pr_mean,
             "per_round_std": pr_std,
+            "per_round_ci95": pr_ci95,
             "n_runs": len(all_vals),
             "per_round": per_round_info,
         }
     return result
+
+
+def _ci95(values: list) -> float:
+    """Compute 95% confidence interval half-width using t-distribution."""
+    n = len(values)
+    if n <= 1:
+        return 0.0
+    std = float(np.std(values, ddof=1))
+    se = std / np.sqrt(n)
+    # Use scipy if available, otherwise approximate with z=1.96 for n>30
+    try:
+        from scipy import stats as sp_stats
+        t_val = float(sp_stats.t.ppf(0.975, df=n - 1))
+    except ImportError:
+        # Approximation: for small n this is less accurate but acceptable
+        t_val = 1.96 if n > 30 else 2.0 + 4.0 / n
+    return float(t_val * se)
 
 
 # ---------------------------------------------------------------------------
@@ -93,8 +117,11 @@ def _aggregate(
 # ---------------------------------------------------------------------------
 
 
-def _fmt(mean: float, std: float) -> str:
-    return f"{mean:.4f}±{std:.4f}"
+def _fmt(mean: float, std: float, ci95: float = 0.0) -> str:
+    base = f"{mean:.4f}±{std:.4f}"
+    if ci95 > 0:
+        base += f" (CI±{ci95:.4f})"
+    return base
 
 
 def generate_reports(
@@ -141,30 +168,30 @@ def generate_reports(
 
     # ---- Grand tables ----
     for agg_key, label in [("flat", "flat"), ("per_round", "round")]:
-        lines = []
         header = ["model"]
         for ds in datasets:
             for m in all_metrics:
                 header.append(f"{ds}_{m}")
-        lines.append(",".join(header))
-
-        for mdl in all_models:
-            row = [mdl]
-            for ds in datasets:
-                mdl_agg = agg_data.get(ds, {}).get(mdl, {})
-                for m in all_metrics:
-                    if m in mdl_agg:
-                        info = mdl_agg[m]
-                        mean = info[f"{agg_key}_mean"]
-                        std = info[f"{agg_key}_std"]
-                        row.append(_fmt(mean, std))
-                    else:
-                        row.append("")
-            lines.append(",".join(row))
 
         path = os.path.join(output_dir, f"benchmark_report_{label}.csv")
-        with open(path, "w") as f:
-            f.write("\n".join(lines) + "\n")
+        with open(path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+
+            for mdl in all_models:
+                row = [mdl]
+                for ds in datasets:
+                    mdl_agg = agg_data.get(ds, {}).get(mdl, {})
+                    for m in all_metrics:
+                        if m in mdl_agg:
+                            info = mdl_agg[m]
+                            mean = info[f"{agg_key}_mean"]
+                            std = info[f"{agg_key}_std"]
+                            ci95 = info.get(f"{agg_key}_ci95", 0.0)
+                            row.append(_fmt(mean, std, ci95))
+                        else:
+                            row.append("")
+                writer.writerow(row)
         logger.info("Wrote %s", path)
 
     # ---- Per-dataset tables ----
@@ -174,24 +201,25 @@ def generate_reports(
             {m for mdl_agg in agg_data.get(ds, {}).values() for m in mdl_agg}
         )
         for agg_key, label in [("flat", "flat"), ("per_round", "round")]:
-            lines = []
             header = ["model"] + ds_metrics
-            lines.append(",".join(header))
-            for mdl in ds_models:
-                row = [mdl]
-                mdl_agg = agg_data[ds][mdl]
-                for m in ds_metrics:
-                    if m in mdl_agg:
-                        info = mdl_agg[m]
-                        mean = info[f"{agg_key}_mean"]
-                        std = info[f"{agg_key}_std"]
-                        row.append(_fmt(mean, std))
-                    else:
-                        row.append("")
-                lines.append(",".join(row))
+
             path = os.path.join(output_dir, f"{ds}_results_{label}.csv")
-            with open(path, "w") as f:
-                f.write("\n".join(lines) + "\n")
+            with open(path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                for mdl in ds_models:
+                    row = [mdl]
+                    mdl_agg = agg_data[ds][mdl]
+                    for m in ds_metrics:
+                        if m in mdl_agg:
+                            info = mdl_agg[m]
+                            mean = info[f"{agg_key}_mean"]
+                            std = info[f"{agg_key}_std"]
+                            ci95 = info.get(f"{agg_key}_ci95", 0.0)
+                            row.append(_fmt(mean, std, ci95))
+                        else:
+                            row.append("")
+                    writer.writerow(row)
             logger.info("Wrote %s", path)
 
 

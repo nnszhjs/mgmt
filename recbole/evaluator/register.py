@@ -19,7 +19,8 @@ def cluster_info(module_name):
     """Collect information of all metrics, including:
 
         - ``metric_need``: Information needed to calculate this metric, the combination of ``rec.items, rec.topk,
-          rec.meanrank, rec.score, data.num_items, data.num_users, data.count_items, data.count_users, data.label``.
+          rec.meanrank, rec.score, rec.pos_u, rec.pos_i, data.num_items, data.num_users, data.count_items,
+          data.count_users, data.label``.
         - ``metric_type``: Whether the scores required by metric are grouped by user, range in ``EvaluatorType.RANKING``
           and ``EvaluatorType.VALUE``.
         - ``smaller``: Whether the smaller metric value represents better performance,

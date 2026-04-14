@@ -327,7 +327,11 @@ class Config(object):
     def _set_default_parameters(self):
         self.final_config_dict["dataset"] = self.dataset
         self.final_config_dict["model"] = self.model
-        if self.dataset == "ml-100k":
+        if self.dataset == "ml-100k" and self.final_config_dict.get("data_path") in (
+            None,
+            "dataset/",
+        ):
+            # Only use the built-in example path when no custom data_path is set
             current_path = os.path.dirname(os.path.realpath(__file__))
             self.final_config_dict["data_path"] = os.path.join(
                 current_path, "../dataset_example/" + self.dataset
@@ -346,10 +350,9 @@ class Config(object):
                     and self.final_config_dict.get("train_neg_sample_args", None)
                     is not None
                 ):
-                    raise ValueError(
-                        f"train_neg_sample_args [{self.final_config_dict['train_neg_sample_args']}] should be None "
-                        f"when the loss_type is CE."
-                    )
+                    # Auto-correct: CE loss handles negatives internally,
+                    # no explicit negative sampling needed.
+                    self.final_config_dict["train_neg_sample_args"] = None
                 self.final_config_dict["MODEL_INPUT_TYPE"] = InputType.POINTWISE
             elif self.final_config_dict["loss_type"] in ["BPR"]:
                 self.final_config_dict["MODEL_INPUT_TYPE"] = InputType.PAIRWISE
@@ -484,57 +487,44 @@ class Config(object):
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
         import torch
 
-        if "local_rank" not in self.final_config_dict:
-            if (
-                "LOCAL_RANK" in os.environ
-                and "RANK" in os.environ
-                and "WORLD_SIZE" in os.environ
-            ):
-                self.final_config_dict["local_rank"] = int(os.environ["LOCAL_RANK"])
-                self.final_config_dict["rank"] = int(os.environ["RANK"])
-                self.final_config_dict["world_size"] = int(os.environ["WORLD_SIZE"])
-                self.final_config_dict["single_spec"] = False
-                torch.cuda.set_device(self.final_config_dict["local_rank"])
-                self.final_config_dict["device"] = torch.device(
-                    "cuda", self.final_config_dict["local_rank"]
-                )
+        # torchrun sets LOCAL_RANK, RANK, WORLD_SIZE in the environment.
+        # When running under torchrun (even with --nproc_per_node=1),
+        # these env vars are always present.
+        if (
+            "LOCAL_RANK" in os.environ
+            and "RANK" in os.environ
+            and "WORLD_SIZE" in os.environ
+        ):
+            self.final_config_dict["local_rank"] = int(os.environ["LOCAL_RANK"])
+            self.final_config_dict["rank"] = int(os.environ["RANK"])
+            self.final_config_dict["world_size"] = int(os.environ["WORLD_SIZE"])
+            self.final_config_dict["single_spec"] = (
+                self.final_config_dict["world_size"] == 1
+            )
+            torch.cuda.set_device(self.final_config_dict["local_rank"])
+            self.final_config_dict["device"] = torch.device(
+                "cuda", self.final_config_dict["local_rank"]
+            )
+            if self.final_config_dict["world_size"] > 1:
                 torch.distributed.init_process_group(
                     backend="nccl",
                     init_method="env://",
                 )
-                if self.final_config_dict["local_rank"] != 0:
-                    self.final_config_dict["state"] = "error"
-                    self.final_config_dict["show_progress"] = False
-                    self.final_config_dict["verbose"] = False
-            else:
-                self.final_config_dict["single_spec"] = True
-                self.final_config_dict["local_rank"] = 0
-                self.final_config_dict["device"] = (
-                    torch.device("cpu")
-                    if len(gpu_id) == 0 or not torch.cuda.is_available()
-                    else torch.device("cuda")
-                )
-        else:
-            if len(gpu_id.split(",")) < self.final_config_dict.get("nproc", 1):
-                raise ValueError(
-                    f"Insufficient GPUs: gpu_id={gpu_id!r} has {len(gpu_id.split(','))} GPUs but nproc={self.final_config_dict.get('nproc', 1)}"
-                )
-            local_rank = int(os.environ["LOCAL_RANK"])
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-            torch.distributed.init_process_group(
-                backend="nccl",
-                rank=rank + self.final_config_dict["offset"],
-                world_size=world_size,
-                init_method="env://",
-            )
-            self.final_config_dict["device"] = torch.device("cuda", local_rank)
-            self.final_config_dict["single_spec"] = False
-            torch.cuda.set_device(local_rank)
-            if local_rank != 0:
+            if self.final_config_dict["local_rank"] != 0:
                 self.final_config_dict["state"] = "error"
                 self.final_config_dict["show_progress"] = False
                 self.final_config_dict["verbose"] = False
+        else:
+            # Fallback: not launched via torchrun (e.g. plain ``python``).
+            # This should only happen during development / testing.
+            self.final_config_dict["single_spec"] = True
+            self.final_config_dict["local_rank"] = 0
+            self.final_config_dict["world_size"] = 1
+            self.final_config_dict["device"] = (
+                torch.device("cpu")
+                if len(gpu_id) == 0 or not torch.cuda.is_available()
+                else torch.device("cuda")
+            )
 
     def _set_train_neg_sample_args(self):
         train_neg_sample_args = self.final_config_dict.get("train_neg_sample_args")

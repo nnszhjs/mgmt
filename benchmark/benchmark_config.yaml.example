@@ -1,0 +1,53 @@
+# ==========================================================================
+#  benchmark_config.yaml - Benchmark配置文件
+# ==========================================================================
+
+# 滑动窗口参数
+temporal_sliding_window:
+  window_size: 0.4      # 每个窗口占总数据的40%
+  rounds: 4             # 生成4个滑动窗口
+  # 自动计算: stride = (1.0 - 0.4) / (4 - 1) = 0.2
+  # 窗口: [0-40%], [20-60%], [40-80%], [60-100%]
+  # 重叠: 20%
+
+# RecBole标准eval_args (窗口内部的划分方式)
+eval_args:
+  # 一般推荐模型使用TS (Time-based Splitting)
+  split: {'TS': [0.8, 0.1, 0.1]}
+  group_by: user
+  order: TO
+  mode: full
+
+# 序列推荐模型可以使用LS (Leave-one-out)
+# eval_args:
+#   split: {'LS': 'valid_and_test'}
+#   group_by: user
+#   order: TO
+#   mode: full
+
+# 随机种子
+seeds: [2022, 2023, 2024, 2025, 2026]
+
+# 模型列表
+models:
+  - BPR
+  - LightGCN
+  - SASRec
+  - MECoDGNN
+
+# 数据集列表
+datasets:
+  - amazon
+
+# GPU配置
+nproc_per_node: 2       # 每个训练任务使用的GPU数量
+
+# 其他配置
+output_dir: benchmark_results
+skip_existing: true
+max_run_timeout: 7200   # 2小时超时
+
+# ==========================================================================
+# 计算成本估算:
+# 4 models × 1 dataset × 4 windows × 5 seeds = 80次训练
+# ==========================================================================

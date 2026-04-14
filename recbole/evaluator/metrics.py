@@ -858,10 +858,22 @@ class TailPercentage(AbstractMetric):
         return metric_dict
 
 class SNIPSRecall(AbstractMetric):
-    """SNIPS-Recall: Recall weighted by Inverse Propensity (1/Popularity)."""
+    r"""SNIPS-Recall with inverse-popularity propensity proxy.
+
+    We use item popularity from the training set as a propensity proxy
+    :math:`\pi(i) \propto pop(i)`, so the gain weight is
+    :math:`w(i) = 1 / max(pop(i), 1)`.
+
+    For each user, the metric is self-normalized by the total inverse-propensity
+    weight of that user's relevant items:
+
+    .. math::
+        \mathrm{SNIPSRecall@K}(u) =
+        \frac{\sum_{j=1}^{K} \mathbb{1}[\hat{R}_j(u) \in R(u)] \, w(\hat{R}_j(u))}
+             {\sum_{i \in R(u)} w(i)}
+    """
     metric_type = EvaluatorType.RANKING
-    # 需要推荐物品列表(ID)，命中掩码(mask)，以及物品流行度统计
-    metric_need = ["rec.items", "rec.topk", "data.count_items"]
+    metric_need = ["rec.items", "rec.topk", "rec.pos_u", "rec.pos_i", "data.count_items"]
     def __init__(self, config):
         super().__init__(config)
         self.topk = config["topk"]
@@ -870,28 +882,29 @@ class SNIPSRecall(AbstractMetric):
         rec_mat = dataobject.get("rec.topk")
         topk_idx, pos_len_list = torch.split(rec_mat, [max(self.topk), 1], dim=1)
         pos_index = topk_idx.numpy()
-        pos_len_list = pos_len_list.squeeze(-1).numpy()
-        
+        pos_u = dataobject.get("rec.pos_u").numpy()
+        pos_i = dataobject.get("rec.pos_i").numpy()
         item_counter = dataobject.get("data.count_items")
-        result = self.metric_info(rec_items, pos_index, pos_len_list, item_counter)
+        result = self.metric_info(rec_items, pos_index, pos_u, pos_i, item_counter)
         return self.topk_result("snipsrecall", result)
-    def metric_info(self, rec_items, pos_index, pos_len_list, item_counter):
-        n_users, max_k = rec_items.shape
-        weights = np.zeros_like(rec_items, dtype=float)
-        
-        # 计算权重：1 / Popularity
-        for u in range(n_users):
-            for k in range(max_k):
-                if pos_index[u, k]:
-                    item_id = rec_items[u, k]
-                    # 获取流行度，若不存在则默认为 1 防止除以 0
-                    pop = item_counter.get(item_id, 1) 
-                    weights[u, k] = 1.0 / pop
-        
-        # Recall 计算：累积权重 / 用户正样本数
-        cum_weights = np.cumsum(weights, axis=1)
-        pos_len_list = np.maximum(pos_len_list, 1) # 防止除以 0
-        return cum_weights / pos_len_list.reshape(-1, 1)
+    @staticmethod
+    def _inverse_propensity(item_ids, item_counter):
+        flat_items = item_ids.reshape(-1)
+        weights = np.fromiter(
+            (1.0 / max(item_counter.get(int(item_id), 1), 1) for item_id in flat_items),
+            dtype=np.float64,
+            count=flat_items.size,
+        )
+        return weights.reshape(item_ids.shape)
+    def metric_info(self, rec_items, pos_index, pos_u, pos_i, item_counter):
+        n_users, _ = rec_items.shape
+        rec_weights = self._inverse_propensity(rec_items, item_counter)
+        hit_weights = rec_weights * pos_index.astype(np.float64)
+        pos_weights = self._inverse_propensity(pos_i, item_counter)
+        pos_weight_sum = np.zeros(n_users, dtype=np.float64)
+        np.add.at(pos_weight_sum, pos_u, pos_weights)
+        denom = np.maximum(pos_weight_sum, 1e-12)
+        return np.cumsum(hit_weights, axis=1) / denom.reshape(-1, 1)
     def topk_result(self, metric, value):
         metric_dict = {}
         avg_result = value.mean(axis=0)
@@ -900,9 +913,14 @@ class SNIPSRecall(AbstractMetric):
             metric_dict[key] = round(avg_result[k - 1], self.decimal_place)
         return metric_dict
 class SNIPSNDCG(AbstractMetric):
-    """SNIPS-NDCG: NDCG weighted by Inverse Propensity (1/Popularity)."""
+    r"""SNIPS-NDCG with inverse-popularity propensity proxy.
+
+    The gain of a hit is weighted by inverse popularity. The normalization term
+    is the ideal weighted DCG for the user's relevant items, obtained by sorting
+    their inverse-propensity weights in descending order.
+    """
     metric_type = EvaluatorType.RANKING
-    metric_need = ["rec.items", "rec.topk", "data.count_items"]
+    metric_need = ["rec.items", "rec.topk", "rec.pos_u", "rec.pos_i", "data.count_items"]
     def __init__(self, config):
         super().__init__(config)
         self.topk = config["topk"]
@@ -911,37 +929,48 @@ class SNIPSNDCG(AbstractMetric):
         rec_mat = dataobject.get("rec.topk")
         topk_idx, pos_len_list = torch.split(rec_mat, [max(self.topk), 1], dim=1)
         pos_index = topk_idx.numpy()
-        pos_len_list = pos_len_list.squeeze(-1).numpy()
-        
+        pos_u = dataobject.get("rec.pos_u").numpy()
+        pos_i = dataobject.get("rec.pos_i").numpy()
         item_counter = dataobject.get("data.count_items")
-        result = self.metric_info(rec_items, pos_index, pos_len_list, item_counter)
+        result = self.metric_info(rec_items, pos_index, pos_u, pos_i, item_counter)
         return self.topk_result("snipsndcg", result)
-    def metric_info(self, rec_items, pos_index, pos_len_list, item_counter):
+    @staticmethod
+    def _inverse_propensity(item_ids, item_counter):
+        flat_items = item_ids.reshape(-1)
+        weights = np.fromiter(
+            (1.0 / max(item_counter.get(int(item_id), 1), 1) for item_id in flat_items),
+            dtype=np.float64,
+            count=flat_items.size,
+        )
+        return weights.reshape(item_ids.shape)
+    def metric_info(self, rec_items, pos_index, pos_u, pos_i, item_counter):
         n_users, max_k = rec_items.shape
-        dcg = np.zeros_like(rec_items, dtype=float)
-        idcg = np.zeros_like(rec_items, dtype=float)
-        
-        # 计算加权 DCG
+        discounts = 1.0 / np.log2(np.arange(2, max_k + 2, dtype=np.float64))
+
+        rec_weights = self._inverse_propensity(rec_items, item_counter)
+        dcg = np.cumsum(
+            rec_weights * pos_index.astype(np.float64) * discounts.reshape(1, -1),
+            axis=1,
+        )
+
+        pos_weights = self._inverse_propensity(pos_i, item_counter)
+        pos_counts = np.bincount(pos_u, minlength=n_users)
+        pos_offsets = np.cumsum(pos_counts) - pos_counts
+
+        idcg = np.zeros((n_users, max_k), dtype=np.float64)
         for u in range(n_users):
-            for k in range(max_k):
-                if pos_index[u, k]:
-                    item_id = rec_items[u, k]
-                    pop = item_counter.get(item_id, 1)
-                    # 权重 = 1/Pop, 折扣 = 1/log2(rank+1) -> 1/log2(k+2)
-                    dcg[u, k] = (1.0 / pop) / np.log2(k + 2)
-        
-        # 计算标准 IDCG (用于归一化)
-        for u in range(n_users):
-            hits = min(pos_len_list[u], max_k)
-            if hits > 0:
-                ranks = np.arange(1, hits + 1)
-                idcg[u, :hits] = 1.0 / np.log2(ranks + 1)
-        
-        cum_dcg = np.cumsum(dcg, axis=1)
-        cum_idcg = np.cumsum(idcg, axis=1)
-        cum_idcg = np.maximum(cum_idcg, 1e-10) # 防止除以 0
-        
-        return cum_dcg / cum_idcg
+            count = pos_counts[u]
+            if count == 0:
+                continue
+            start = pos_offsets[u]
+            user_weights = np.sort(pos_weights[start : start + count])[::-1]
+            limit = min(count, max_k)
+            idcg_prefix = np.cumsum(user_weights[:limit] * discounts[:limit])
+            idcg[u, :limit] = idcg_prefix
+            if limit < max_k:
+                idcg[u, limit:] = idcg_prefix[-1]
+
+        return dcg / np.maximum(idcg, 1e-12)
     def topk_result(self, metric, value):
         metric_dict = {}
         avg_result = value.mean(axis=0)

@@ -31,6 +31,9 @@ epochs: 300
 train_batch_size: 2048
 eval_batch_size: 4096
 learning_rate: 0.001
-stopping_step: 10 
+stopping_step: 10
+clip_grad_norm:
+    max_norm: 1.0
+    norm_type: 2
 # ===== 运行控制 =====
 gpu_id: 0,1 

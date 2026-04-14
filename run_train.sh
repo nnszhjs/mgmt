@@ -1,1 +1,0 @@
-python run_recbole.py --model LightGCN --dataset amazon --nproc=2

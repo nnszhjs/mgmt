@@ -114,10 +114,14 @@ class ComiRec(SequentialRecommender):
 
         for i in range(self.n_iterations):
             # mask padding positions before softmax
-            b_masked = b.masked_fill(mask_expanded, float("-inf"))
+            # Use -1e9 instead of float("-inf") to prevent SoftmaxBackward0 NaN gradients
+            # on fully padded sequences (where exp(-inf)/sum(exp(-inf)) = 0/0 -> NaN)
+            b_masked = b.masked_fill(mask_expanded, -1e9)
             c = torch.softmax(b_masked, dim=-1)  # (B, L, K)
-            # handle fully-padded sequences: softmax(-inf) -> nan, replace with 0
-            c = torch.nan_to_num(c, nan=0.0)
+
+            # For fully-padded sequences, all K logits are -1e9, so softmax returns uniform 1/K.
+            # We explicitly zero them out using the mask to ensure they contribute exactly 0.
+            c = c.masked_fill(mask_expanded, 0.0)
 
             # weighted sum: (B, K, d)
             z = torch.einsum("blk,blkd->bkd", c, u_hat)

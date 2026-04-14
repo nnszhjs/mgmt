@@ -1,46 +1,46 @@
-# Benchmark Module
+# Benchmark 模块
 
-Sliding window temporal evaluation framework for RecBole.
+RecBole的滑动窗口时序评估框架。
 
-## Overview
+## 概述
 
-This module provides a robust benchmark framework for evaluating recommendation models across multiple temporal windows. It uses **fixed-length sliding windows** combined with RecBole's standard `eval_args` for data splitting.
+本模块提供了一个鲁棒的benchmark框架，用于在多个时间窗口上评估推荐模型。它使用**固定长度滑动窗口**结合RecBole的标准`eval_args`进行数据划分。
 
-**Key Features**:
-- ✅ Fixed-length sliding windows (`window_size + rounds`)
-- ✅ RecBole standard `eval_args` for train/valid/test split
-- ✅ Automatic stride calculation for even coverage
-- ✅ Multi-seed evaluation for statistical significance
-- ✅ SQLite database for result tracking
+**核心特性**:
+- ✅ 固定长度滑动窗口 (`window_size + rounds`)
+- ✅ 使用RecBole标准 `eval_args` 进行train/valid/test划分
+- ✅ 自动计算stride确保均匀覆盖
+- ✅ 多种子评估提供统计显著性
+- ✅ SQLite数据库跟踪结果
 
 ---
 
-## Quick Start
+## 快速开始
 
 ```bash
-# 1. Create config from example
+# 1. 从示例创建配置
 cp benchmark_config.yaml.example benchmark_config.yaml
 
-# 2. Edit configuration
+# 2. 编辑配置
 vim benchmark_config.yaml
 
-# 3. Run benchmark
+# 3. 运行benchmark
 ./benchmark.sh
 
-# Or use Python directly
+# 或直接使用Python
 python3 run_benchmark.py --config benchmark_config.yaml
 ```
 
 ---
 
-## Configuration
+## 配置说明
 
-### Basic Structure
+### 基本结构
 
 ```yaml
 temporal_sliding_window:
-  window_size: 0.4      # Window size (40% of data)
-  rounds: 4             # Number of windows
+  window_size: 0.4      # 窗口大小 (40%数据)
+  rounds: 4             # 窗口数量
 
 eval_args:
   split: {'TS': [0.8, 0.1, 0.1]}
@@ -53,25 +53,25 @@ datasets: [amazon]
 nproc_per_node: 2
 ```
 
-### Parameters
+### 参数说明
 
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `window_size` | float | Window size as fraction (0.0-1.0) | `0.4` (40%) |
-| `rounds` | int | Number of sliding windows | `4` |
-| `eval_args` | dict | RecBole's standard eval_args | See below |
-| `seeds` | list[int] | Random seeds for repeated runs | `[2022, 2023]` |
-| `models` | list[str] | Model names to evaluate | `[BPR, LightGCN]` |
-| `datasets` | list[str] | Dataset names | `[amazon]` |
-| `nproc_per_node` | int | GPUs per training run | `2` |
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `window_size` | float | 窗口大小，占总数据的比例 (0.0-1.0) | `0.4` (40%) |
+| `rounds` | int | 滑动窗口数量 | `4` |
+| `eval_args` | dict | RecBole标准eval_args | 见下文 |
+| `seeds` | list[int] | 随机种子列表 | `[2022, 2023]` |
+| `models` | list[str] | 模型名称列表 | `[BPR, LightGCN]` |
+| `datasets` | list[str] | 数据集名称列表 | `[amazon]` |
+| `nproc_per_node` | int | 每次训练使用的GPU数量 | `2` |
 
-**Auto-calculated**:
+**自动计算**:
 - `stride = (1.0 - window_size) / (rounds - 1)`
 - `overlap = window_size - stride`
 
-### eval_args Options
+### eval_args 选项
 
-**Time-based Splitting (TS)** - Recommended for general models:
+**时间划分 (TS)** - 推荐用于一般模型:
 ```yaml
 eval_args:
   split: {'TS': [0.8, 0.1, 0.1]}
@@ -80,7 +80,7 @@ eval_args:
   mode: full
 ```
 
-**Leave-one-out (LS)** - Recommended for sequential models:
+**留一法 (LS)** - 推荐用于序列模型:
 ```yaml
 eval_args:
   split: {'LS': 'valid_and_test'}
@@ -91,23 +91,23 @@ eval_args:
 
 ---
 
-## Module Structure
+## 模块结构
 
 ```
 benchmark/
 ├── __init__.py
-├── config.py          # BenchmarkConfig dataclass
-├── splitter.py        # Sliding window generation
-├── runner.py          # Single experiment runner
-├── launcher.py        # torchrun wrapper
-├── db.py              # SQLite database interface
-├── report.py          # Result aggregation
-└── plot.py            # Visualization utilities
+├── config.py          # BenchmarkConfig 配置类
+├── splitter.py        # 滑动窗口生成
+├── runner.py          # 单个实验运行器
+├── launcher.py        # torchrun 包装器
+├── db.py              # SQLite 数据库接口
+├── report.py          # 结果聚合
+└── plot.py            # 可视化工具
 ```
 
-### Core Components
+### 核心组件
 
-#### 1. `config.py` - Configuration
+#### 1. `config.py` - 配置管理
 
 ```python
 from benchmark.config import BenchmarkConfig
@@ -122,7 +122,7 @@ cfg = BenchmarkConfig(
 )
 ```
 
-#### 2. `splitter.py` - Window Generation
+#### 2. `splitter.py` - 窗口生成
 
 ```python
 from benchmark.splitter import generate_sliding_windows
@@ -136,17 +136,17 @@ windows_dir, windows_info = generate_sliding_windows(
 )
 ```
 
-**Output**:
+**输出**:
 ```
 benchmark_results/amazon/_windows/
 ├── window_0.inter  # [0-40%]
 ├── window_1.inter  # [20-60%]
 ├── window_2.inter  # [40-80%]
 ├── window_3.inter  # [60-100%]
-└── .done_w0.4_r4   # Marker file
+└── .done_w0.4_r4   # 标记文件
 ```
 
-#### 3. `runner.py` - Experiment Execution
+#### 3. `runner.py` - 实验执行
 
 ```python
 from benchmark.runner import run_single_window
@@ -164,13 +164,13 @@ run_single_window(
 )
 ```
 
-#### 4. `db.py` - Database Interface
+#### 4. `db.py` - 数据库接口
 
 ```python
 from benchmark.db import BenchmarkDB
 
 with BenchmarkDB('benchmark_results/benchmark.db') as db:
-    # Create run
+    # 创建运行记录
     run_id = db.get_or_create_run(
         dataset='amazon',
         model='LightGCN',
@@ -178,19 +178,19 @@ with BenchmarkDB('benchmark_results/benchmark.db') as db:
         seed=2022,
     )
     
-    # Mark running
+    # 标记为运行中
     db.mark_running(run_id)
     
-    # Save results
+    # 保存结果
     db.mark_done(run_id, valid_metrics, test_metrics)
     
-    # Check status
+    # 检查状态
     is_done = db.is_done('amazon', 'LightGCN', 0, 2022)
 ```
 
 ---
 
-## Database Schema
+## 数据库Schema
 
 ```sql
 CREATE TABLE runs (
@@ -212,7 +212,7 @@ CREATE TABLE runs (
 CREATE TABLE metrics (
     id      INTEGER PRIMARY KEY,
     run_id  INTEGER NOT NULL REFERENCES runs(id),
-    phase   TEXT    NOT NULL,  -- 'valid' or 'test'
+    phase   TEXT    NOT NULL,  -- 'valid' 或 'test'
     name    TEXT    NOT NULL,
     value   REAL    NOT NULL,
     UNIQUE(run_id, phase, name)
@@ -221,9 +221,9 @@ CREATE TABLE metrics (
 
 ---
 
-## Usage Examples
+## 使用示例
 
-### Example 1: Quick Test
+### 示例1: 快速测试
 
 ```yaml
 # test_config.yaml
@@ -244,10 +244,10 @@ nproc_per_node: 1
 
 ```bash
 python3 run_benchmark.py --config test_config.yaml
-# Cost: 1 model × 1 dataset × 2 windows × 1 seed = 2 training runs
+# 成本: 1 模型 × 1 数据集 × 2 窗口 × 1 种子 = 2次训练
 ```
 
-### Example 2: Full Evaluation
+### 示例2: 完整评估
 
 ```yaml
 # full_config.yaml
@@ -268,10 +268,10 @@ nproc_per_node: 2
 
 ```bash
 python3 run_benchmark.py --config full_config.yaml
-# Cost: 4 models × 1 dataset × 4 windows × 5 seeds = 80 training runs
+# 成本: 4 模型 × 1 数据集 × 4 窗口 × 5 种子 = 80次训练
 ```
 
-### Example 3: Sequential Models
+### 示例3: 序列模型
 
 ```yaml
 # sequential_config.yaml
@@ -280,7 +280,7 @@ temporal_sliding_window:
   rounds: 4
 
 eval_args:
-  split: {'LS': 'valid_and_test'}  # Leave-one-out
+  split: {'LS': 'valid_and_test'}  # 留一法
   group_by: user
   order: TO
 
@@ -292,7 +292,7 @@ nproc_per_node: 2
 
 ---
 
-## API Reference
+## API参考
 
 ### BenchmarkConfig
 
@@ -312,11 +312,11 @@ class BenchmarkConfig:
     
     @property
     def stride(self) -> float:
-        """Auto-calculated stride"""
+        """自动计算的stride"""
         
     @property
     def overlap(self) -> float:
-        """Auto-calculated overlap"""
+        """自动计算的overlap"""
 ```
 
 ### generate_sliding_windows()
@@ -331,9 +331,9 @@ def generate_sliding_windows(
     *,
     force: bool = False,
 ) -> tuple[str, list[dict]]:
-    """Generate fixed-length sliding windows.
+    """生成固定长度的滑动窗口。
     
-    Returns:
+    返回:
         (windows_dir, windows_info)
     """
 ```
@@ -352,28 +352,28 @@ def run_single_window(
     windows_dir: str,
     repo_root: str,
 ):
-    """Train and evaluate on a single temporal window."""
+    """在单个时间窗口上训练和评估。"""
 ```
 
 ---
 
-## Version History
+## 版本历史
 
-- **v2 (2024-04)**: Current version
-  - Uses `window_size + rounds` parameters
-  - Each window uses RecBole's standard `eval_args`
-  - Simpler, more maintainable code
+- **v2 (2024-04)**: 当前版本
+  - 使用 `window_size + rounds` 参数
+  - 每个窗口使用RecBole标准 `eval_args`
+  - 代码更简单、更易维护
   
-- **v1 (deprecated)**: Old version
-  - Used `benchmark_rounds + train_splits` parameters
-  - Custom chunk-based splitting with sequential features
-  - Code preserved in `*_v1_backup.py` files
+- **v1 (已弃用)**: 旧版本
+  - 使用 `benchmark_rounds + train_splits` 参数
+  - 自定义chunk划分和序列特征构建
+  - 代码保留在 `*_v1_backup.py` 文件中
 
 ---
 
-## See Also
+## 相关文档
 
-- **Main README**: `../BENCHMARK_README.md`
-- **Data Splitting Guide**: `../data_splitting_explained.md`
-- **Design Document**: `../benchmark_sliding_window_design.md`
-- **Quick Reference**: `../QUICK_REFERENCE.txt`
+- **主README**: `../BENCHMARK_README.md`
+- **数据划分指南**: `../data_splitting_explained.md`
+- **设计文档**: `../benchmark_sliding_window_design.md`
+- **快速参考**: `../QUICK_REFERENCE.txt`
