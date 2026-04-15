@@ -52,9 +52,15 @@ class BenchmarkConfig:
     output_dir: str = "benchmark_results"
     base_config_file: Optional[str] = None
     skip_existing: bool = True
+    overwrite: bool = False  # Force re-run experiments, overwriting existing results
+    force_resplit: bool = False  # Force regenerate sliding windows
     db_name: str = "benchmark.db"
     nproc_per_node: int = 1
     max_run_timeout: int = 7200  # seconds (2 hours default)
+
+    # Extra RecBole parameters (train_batch_size, eval_batch_size, metrics, etc.)
+    # These are passed directly to RecBole's config_dict.
+    recbole_config: dict = field(default_factory=dict)
 
     # ---- derived helpers ------------------------------------------------
 

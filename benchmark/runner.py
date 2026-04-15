@@ -51,9 +51,10 @@ def run_single_window(
     run_id = db.get_or_create_run(
         dataset_name,
         model_name,
+        cfg.window_size,
+        cfg.rounds,
         window_idx,
         seed,
-        window_size=cfg.window_size,
         window_start=window_info.get('start_ratio'),
         window_end=window_info.get('end_ratio'),
     )
@@ -97,7 +98,12 @@ def run_single_window(
             'seed': seed,
             'eval_args': cfg.eval_args,
             'checkpoint_dir': run_dir,
+            'data_path': os.path.join(cfg.output_dir, "temp"),
+            'show_progress': False,
         }
+
+        # Merge extra RecBole parameters (train_batch_size, eval_batch_size, etc.)
+        config_dict.update(cfg.recbole_config)
 
         # Merge with base config if provided
         if cfg.base_config_file:

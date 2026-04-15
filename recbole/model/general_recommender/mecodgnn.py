@@ -464,6 +464,14 @@ class MECoDGNN(GeneralRecommender):
         k_hat = self.degree_pred(all_item_embs).squeeze(-1)       # (T, V)
         return F.mse_loss(k_hat, self.log_deg_all, reduction="mean")
 
+    def _mat_chunk_fn(self, u_chunk, v_emb):
+        """Process one user chunk for Matthew Effect loss (checkpointed)."""
+        pw     = u_chunk.unsqueeze(1) * v_emb.unsqueeze(0)           # (C, V', d)
+        logits = self.mat_ffnn(pw.reshape(-1, pw.shape[-1]))         # (C*V', 2)
+        probs  = F.gumbel_softmax(logits, tau=2.0, hard=False)       # (C*V', 2)
+        click  = probs[:, 1].reshape(u_chunk.shape[0], v_emb.shape[0])  # (C, V')
+        return click.sum(dim=0)                                      # (V',)
+
     def _compute_l_mat(self, user_emb, item_emb):
         """Matthew Effect Regularization (Eq. 11-15) -- binning fully vectorised.
 
@@ -486,16 +494,17 @@ class MECoDGNN(GeneralRecommender):
         u_emb = user_emb[u_idx]    # (n_sample_u, d)
         v_emb = item_emb[v_idx]    # (n_sample_v, d)
 
-        # --- Chunked FFNN to avoid OOM ---
+        # --- Chunked FFNN with gradient checkpointing to avoid OOM ---
+        # Without checkpointing, all chunk computation graphs accumulate in
+        # memory until backward, causing 70+ GiB allocation during .backward().
         chunk_size = 128
         d_star = torch.zeros(n_sample_v, device=self.device)
         for start in range(0, n_sample_u, chunk_size):
             u_chunk  = u_emb[start: start + chunk_size]                    # (C, d)
-            pw       = u_chunk.unsqueeze(1) * v_emb.unsqueeze(0)           # (C, V', d)
-            logits   = self.mat_ffnn(pw.reshape(-1, pw.shape[-1]))         # (C*V', 2)
-            probs    = F.gumbel_softmax(logits, tau=2.0, hard=False)       # (C*V', 2)
-            click    = probs[:, 1].reshape(u_chunk.shape[0], n_sample_v)   # (C, V')
-            d_star  += click.sum(dim=0)                                    # accumulate
+            d_star  += torch.utils.checkpoint.checkpoint(
+                self._mat_chunk_fn, u_chunk, v_emb,
+                use_reentrant=False,
+            )
 
         # --- Vectorised binning with scatter_add ---
         sampled_bins = self.item_bins[v_idx]                    # (V',)

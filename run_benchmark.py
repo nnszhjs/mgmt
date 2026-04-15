@@ -52,16 +52,38 @@ def parse_args():
         default="dataset/",
         help="Path to the RecBole dataset directory (default: dataset/).",
     )
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Force re-run experiments, overwriting existing results.",
+    )
+    p.add_argument(
+        "--force-resplit",
+        action="store_true",
+        help="Force regenerate sliding windows even if they already exist.",
+    )
     return p.parse_args()
 
 
-def load_config(config_path: str) -> BenchmarkConfig:
+def load_config(config_path: str, args) -> BenchmarkConfig:
     """Load benchmark config from YAML file."""
     with open(config_path) as f:
         config_dict = yaml.safe_load(f)
 
     # Extract parameters
     tw = config_dict.get('temporal_sliding_window', {})
+
+    # Command-line args override config file
+    overwrite = args.overwrite if hasattr(args, 'overwrite') else config_dict.get('overwrite', False)
+    force_resplit = args.force_resplit if hasattr(args, 'force_resplit') else config_dict.get('force_resplit', False)
+
+    # Keys managed by BenchmarkConfig — everything else goes to recbole_config
+    _BENCHMARK_KEYS = {
+        'temporal_sliding_window', 'eval_args', 'seeds', 'models', 'datasets',
+        'output_dir', 'base_config_file', 'skip_existing', 'overwrite',
+        'force_resplit', 'nproc_per_node', 'max_run_timeout', 'db_name',
+    }
+    recbole_config = {k: v for k, v in config_dict.items() if k not in _BENCHMARK_KEYS}
 
     return BenchmarkConfig(
         models=config_dict.get('models', []),
@@ -78,8 +100,11 @@ def load_config(config_path: str) -> BenchmarkConfig:
         output_dir=config_dict.get('output_dir', 'benchmark_results'),
         base_config_file=config_dict.get('base_config_file'),
         skip_existing=config_dict.get('skip_existing', True),
+        overwrite=overwrite,
+        force_resplit=force_resplit,
         nproc_per_node=config_dict.get('nproc_per_node', 1),
         max_run_timeout=config_dict.get('max_run_timeout', 7200),
+        recbole_config=recbole_config,
     )
 
 
@@ -95,7 +120,7 @@ def main():
     log = logging.getLogger("benchmark")
 
     # ---- load config ----
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, args)
     cfg.validate()
 
     log.info("=" * 70)
@@ -110,6 +135,8 @@ def main():
     log.info("Seeds: %s", cfg.seeds)
     log.info("Eval args: %s", cfg.eval_args)
     log.info("GPU processes: %d", cfg.nproc_per_node)
+    log.info("Overwrite mode: %s", cfg.overwrite)
+    log.info("Force resplit: %s", cfg.force_resplit)
     log.info("=" * 70)
 
     total_experiments = len(cfg.models) * len(cfg.datasets) * cfg.rounds * len(cfg.seeds)
@@ -149,6 +176,7 @@ def main():
                 output_dir=cfg.output_dir,
                 window_size=cfg.window_size,
                 rounds=cfg.rounds,
+                force=cfg.force_resplit,
             )
             windows_map[ds] = (windows_dir, windows_info)
             log.info("Generated %d windows for %s", len(windows_info), ds)
@@ -172,13 +200,30 @@ def main():
                         progress = n_done + n_skip + n_fail + 1
 
                         try:
-                            if cfg.skip_existing and db.is_done(ds, model, window_idx, seed):
+                            # Check if experiment should be run
+                            status = db.run_status(ds, model, cfg.window_size, cfg.rounds, window_idx, seed)
+
+                            if cfg.overwrite and status is not None:
+                                # Overwrite mode: delete existing record
+                                db.delete_run(ds, model, cfg.window_size, cfg.rounds, window_idx, seed)
+                                log.info(
+                                    "[%d/%d] OVERWRITE %s/%s/window%d/seed=%d (was: %s)",
+                                    progress, total_experiments, model, ds, window_idx, seed, status,
+                                )
+                            elif status == "done":
+                                # Skip completed experiments
                                 n_skip += 1
                                 log.info(
-                                    "[%d/%d] SKIP %s/%s/window%d/seed=%d",
+                                    "[%d/%d] SKIP %s/%s/window%d/seed=%d (already done)",
                                     progress, total_experiments, model, ds, window_idx, seed,
                                 )
                                 continue
+                            elif status in ("failed", "pending"):
+                                # Re-run failed or pending experiments
+                                log.info(
+                                    "[%d/%d] RETRY %s/%s/window%d/seed=%d (was: %s)",
+                                    progress, total_experiments, model, ds, window_idx, seed, status,
+                                )
 
                             log.info(
                                 "[%d/%d] RUN  %s/%s/window%d (%.1f%%-%.1f%%)/seed=%d",

@@ -4,8 +4,8 @@
 
 # 滑动窗口参数
 temporal_sliding_window:
-  window_size: 1.0      
-  rounds: 1          
+  window_size: 0.6      
+  rounds: 3          
 
 eval_args:
   # 一般推荐模型使用TS (Time-based Splitting)
@@ -22,14 +22,18 @@ eval_args:
 #   mode: full
 
 # 随机种子
-seeds: [2022] #, 2023, 2024, 2025, 2026]
+seeds: [2022, 2023, 2024, 2025, 2026]
 
 # 模型列表
 models:
   - BPR
   - LightGCN
   - SASRec
+  - MECoDGNNLEG
   - MECoDGNN
+  - ComiRec
+  - DyGCN
+  - YouTubeDNN
 
 # 数据集列表
 datasets:
@@ -37,6 +41,18 @@ datasets:
 
 # GPU配置
 nproc_per_node: 2       # 每个训练任务使用的GPU数量
+
+# 训练参数（不设置则使用RecBole默认值，eval_batch_size默认67M会爆显存）
+train_batch_size: 8192
+eval_batch_size: 4194304
+epochs: 300
+stopping_step: 10
+learning_rate: 0.001
+
+# 评估指标
+metrics: ["Recall","MRR","NDCG","Hit","Precision","ItemCoverage","GiniExposure", "SNIPSRecall","SNIPSNDCG"]
+topk: [10,20]
+valid_metric: NDCG@10
 
 # 其他配置
 output_dir: benchmark_results

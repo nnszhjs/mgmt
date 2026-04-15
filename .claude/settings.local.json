@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x:*)",
+      "Bash(bash clean_benchmark.sh)",
+      "Bash(ls -la run_benchmark*.py benchmark/*.py)",
+      "Bash(mv runner.py runner_v1_backup.py)",
+      "Bash(mv runner_v2.py runner.py)",
+      "Bash(ls -la *.py *.sh *.md *.txt)",
+      "Bash(ls -la test*.sh run_benchmark*.py)",
+      "Bash(ls -la *.md *.txt)",
+      "Bash(ls:*)",
+      "Bash(./benchmark.sh --help)",
+      "Bash(./clean_db.sh:*)",
+      "Bash(./benchmark.sh --report)",
+      "Bash(find benchmark_results:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

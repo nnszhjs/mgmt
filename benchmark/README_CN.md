@@ -31,6 +31,25 @@ vim benchmark_config.yaml
 python3 run_benchmark.py --config benchmark_config.yaml
 ```
 
+### 命令行选项
+
+```bash
+# 默认：跳过已完成，重跑失败的
+./benchmark.sh
+
+# 强制重跑所有实验
+./benchmark.sh --overwrite
+
+# 强制重新生成滑动窗口
+./benchmark.sh --force-resplit
+
+# 完全重新开始
+./benchmark.sh --overwrite --force-resplit
+
+# 只生成报告
+./benchmark.sh --report
+```
+
 ---
 
 ## 配置说明
@@ -197,8 +216,9 @@ CREATE TABLE runs (
     id                INTEGER PRIMARY KEY,
     dataset           TEXT    NOT NULL,
     model             TEXT    NOT NULL,
+    window_size       REAL    NOT NULL,
+    rounds            INTEGER NOT NULL,
     window_idx        INTEGER NOT NULL,
-    window_size       REAL,
     window_start      REAL,
     window_end        REAL,
     seed              INTEGER NOT NULL,
@@ -206,7 +226,7 @@ CREATE TABLE runs (
     started_at        TEXT,
     finished_at       TEXT,
     error_msg         TEXT,
-    UNIQUE(dataset, model, window_idx, seed)
+    UNIQUE(dataset, model, window_size, rounds, window_idx, seed)
 );
 
 CREATE TABLE metrics (
@@ -218,6 +238,65 @@ CREATE TABLE metrics (
     UNIQUE(run_id, phase, name)
 );
 ```
+
+**唯一键**: `(dataset, model, window_size, rounds, window_idx, seed)`
+
+不同的窗口配置（window_size/rounds）会分别存储结果，互不影响。
+
+---
+
+## 运行模式
+
+### 默认模式
+
+```bash
+./benchmark.sh
+```
+
+**行为**:
+- 跳过 status = `done` 的实验
+- 重跑 status = `failed` 或 `pending` 的实验
+- 复用已有的窗口文件
+
+**场景**: 继续中断的运行，重试失败的实验
+
+### 覆盖模式
+
+```bash
+./benchmark.sh --overwrite
+```
+
+**行为**:
+- 删除匹配的实验记录
+- 强制重跑所有实验
+- 复用已有的窗口文件
+
+**场景**: 代码改了，需要重新验证结果
+
+### 强制重新划分
+
+```bash
+./benchmark.sh --force-resplit
+```
+
+**行为**:
+- 重新生成窗口文件
+- 跳过 status = `done` 的实验
+
+**场景**: 原始数据集更新了，需要重新生成时间窗口
+
+### 组合模式
+
+```bash
+./benchmark.sh --overwrite --force-resplit
+```
+
+**行为**:
+- 重新生成窗口文件
+- 删除匹配的实验记录
+- 强制重跑所有实验
+
+**场景**: 完全重新开始
 
 ---
 

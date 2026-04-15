@@ -17,10 +17,10 @@ temporal_agg: lstm      # (str) Temporal aggregation method. Options:
 cumulative_graph: True  # (bool) True=cumulative snapshots, False=independent incremental snapshots (default).
 
 # --- Diversity & Regularization ---
-n_groups: 10            # (int) Number of item groups Q for Lorenz-curve binning.
+n_groups: 50            # (int) Number of item groups Q for Lorenz-curve binning.
 alpha: 0.01             # (float) Weight for Stage Degree Regularization loss L_reg.
                         #         All losses use mean reduction, so alpha stays moderate.
-beta: 10.0               # (float) Weight for Matthew Effect Regularization loss L_mat.
+beta: 1.0               # (float) Weight for Matthew Effect Regularization loss L_mat.
                         #         All losses use mean reduction, so beta stays moderate.
 gini_target: 0.7        # (float) Target Gini coefficient. Lower values -> more diversity.
                         #         Typical values: 0.0 (perfect equality) to 0.9 (concentrated).

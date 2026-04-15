@@ -72,9 +72,12 @@ def get_model(model_name):
     model_module = None
     for submodule in model_submodule:
         module_path = ".".join(["recbole.model", submodule, model_file_name])
-        if importlib.util.find_spec(module_path, __name__):
-            model_module = importlib.import_module(module_path, __name__)
-            break
+        try:
+            if importlib.util.find_spec(module_path, __name__):
+                model_module = importlib.import_module(module_path, __name__)
+                break
+        except (ModuleNotFoundError, ImportError):
+            continue
 
     if model_module is None:
         raise ValueError(

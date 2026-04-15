@@ -1,0 +1,29 @@
+# MECoDGNNLEG (Legacy) Hyperparameters
+# Faithful reproduction of the original MgmtSci/code model logic within RecBole.
+
+# --- Architecture ---
+embedding_size: 64              # (int) Embedding dimension d for users and items.
+n_layers_per_stage: [3,3,3,3]   # (list[int]) GNN propagation layers per time-step.
+                                #   Length should match n_time_steps; if shorter, last value is repeated.
+n_time_steps: 4                 # (int) Number of temporal graph snapshots T.
+lstm_hidden: 64                 # (int) Hidden dimension for temporal module.
+temporal_agg: rnn               # (str) Temporal aggregation method. Options: "lstm", "rnn", "mean", "attn".
+                                #   Default "rnn" matches the original code's nn.RNN.
+
+# --- Dynamic Graph ---
+cumulative_graph: False         # (bool) True=cumulative snapshots, False=independent incremental snapshots.
+
+# --- Diversity & Regularization ---
+n_groups: 50                    # (int) Number of item groups Q for Lorenz-curve binning.
+alpha: 0.01                     # (float) Weight for Stage Degree Regularization loss L_reg.
+beta: 1.0                       # (float) Weight for Matthew Effect Regularization loss L_mat.
+gini_target: 0.75              # (float) Target Gini coefficient for Lorenz-curve binning.
+reg_weight: 0.00001                # (float) Weight for L2 embedding regularization.
+
+# --- Matthew Effect Sampling ---
+mat_users: 2048                 # (int) Users sampled for L_mat computation.
+mat_items: 4096                 # (int) Items sampled for L_mat computation.
+
+# --- Performance ---
+use_compile: True              # (bool) Apply torch.compile (requires PyTorch>=2.0).
+use_tf32: True                 # (bool) Enable TF32 matmul precision on Ampere+ GPUs.

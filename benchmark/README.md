@@ -31,6 +31,25 @@ vim benchmark_config.yaml
 python3 run_benchmark.py --config benchmark_config.yaml
 ```
 
+### Command-line Options
+
+```bash
+# Default: skip done, retry failed
+./benchmark.sh
+
+# Force re-run all experiments
+./benchmark.sh --overwrite
+
+# Regenerate sliding windows
+./benchmark.sh --force-resplit
+
+# Complete fresh start
+./benchmark.sh --overwrite --force-resplit
+
+# Generate reports only
+./benchmark.sh --report
+```
+
 ---
 
 ## Configuration
@@ -197,8 +216,9 @@ CREATE TABLE runs (
     id                INTEGER PRIMARY KEY,
     dataset           TEXT    NOT NULL,
     model             TEXT    NOT NULL,
+    window_size       REAL    NOT NULL,
+    rounds            INTEGER NOT NULL,
     window_idx        INTEGER NOT NULL,
-    window_size       REAL,
     window_start      REAL,
     window_end        REAL,
     seed              INTEGER NOT NULL,
@@ -206,7 +226,7 @@ CREATE TABLE runs (
     started_at        TEXT,
     finished_at       TEXT,
     error_msg         TEXT,
-    UNIQUE(dataset, model, window_idx, seed)
+    UNIQUE(dataset, model, window_size, rounds, window_idx, seed)
 );
 
 CREATE TABLE metrics (
@@ -218,6 +238,65 @@ CREATE TABLE metrics (
     UNIQUE(run_id, phase, name)
 );
 ```
+
+**Unique Key**: `(dataset, model, window_size, rounds, window_idx, seed)`
+
+This allows you to run the same model/dataset/seed with different window configurations, and results will be stored separately.
+
+---
+
+## Run Modes
+
+### Default Mode
+
+```bash
+./benchmark.sh
+```
+
+**Behavior**:
+- Skip experiments with status = `done`
+- Re-run experiments with status = `failed` or `pending`
+- Reuse existing window files
+
+**Use case**: Continue interrupted runs, retry failed experiments
+
+### Overwrite Mode
+
+```bash
+./benchmark.sh --overwrite
+```
+
+**Behavior**:
+- Delete existing records for matching experiments
+- Force re-run all experiments
+- Reuse existing window files
+
+**Use case**: Code changed, need to re-validate results
+
+### Force Resplit Mode
+
+```bash
+./benchmark.sh --force-resplit
+```
+
+**Behavior**:
+- Regenerate window files even if they exist
+- Skip experiments with status = `done`
+
+**Use case**: Original dataset changed, need to regenerate windows
+
+### Combined Mode
+
+```bash
+./benchmark.sh --overwrite --force-resplit
+```
+
+**Behavior**:
+- Regenerate window files
+- Delete existing records
+- Force re-run all experiments
+
+**Use case**: Complete fresh start
 
 ---
 

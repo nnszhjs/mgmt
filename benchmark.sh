@@ -11,6 +11,8 @@
 #   ./benchmark.sh --test             # 运行快速测试
 #   ./benchmark.sh --clean            # 清理旧数据
 #   ./benchmark.sh --report           # 只生成报告
+#   ./benchmark.sh --overwrite        # 强制重跑所有实验
+#   ./benchmark.sh --force-resplit    # 强制重新生成窗口
 #
 # ==========================================================================
 
@@ -20,22 +22,38 @@ set -euo pipefail
 DEFAULT_CONFIG="benchmark_config.yaml"
 
 # 解析参数
-if [ $# -eq 0 ]; then
-    CONFIG_FILE="$DEFAULT_CONFIG"
-    MODE="run"
-elif [ "$1" = "--test" ]; then
-    echo "运行快速测试..."
-    exec ./test_benchmark.sh
-elif [ "$1" = "--clean" ]; then
-    echo "清理旧数据..."
-    exec ./clean_benchmark.sh
-elif [ "$1" = "--report" ]; then
-    CONFIG_FILE="${2:-$DEFAULT_CONFIG}"
-    MODE="report"
-else
-    CONFIG_FILE="$1"
-    MODE="run"
-fi
+CONFIG_FILE="$DEFAULT_CONFIG"
+MODE="run"
+EXTRA_ARGS=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --test)
+            echo "运行快速测试..."
+            exec ./test_benchmark.sh
+            ;;
+        --clean)
+            echo "清理旧数据..."
+            exec ./clean_benchmark.sh
+            ;;
+        --report)
+            MODE="report"
+            shift
+            ;;
+        --overwrite)
+            EXTRA_ARGS="$EXTRA_ARGS --overwrite"
+            shift
+            ;;
+        --force-resplit)
+            EXTRA_ARGS="$EXTRA_ARGS --force-resplit"
+            shift
+            ;;
+        *)
+            CONFIG_FILE="$1"
+            shift
+            ;;
+    esac
+done
 
 # 检查配置文件
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -51,11 +69,12 @@ echo "Benchmark框架"
 echo "=========================================="
 echo "配置文件: $CONFIG_FILE"
 echo "模式: $MODE"
+echo "额外参数: $EXTRA_ARGS"
 echo ""
 
 # 运行benchmark
 if [ "$MODE" = "report" ]; then
-    python3 run_benchmark.py --config "$CONFIG_FILE" --report_only
+    python3 run_benchmark.py --config "$CONFIG_FILE" --report_only $EXTRA_ARGS
 else
-    python3 run_benchmark.py --config "$CONFIG_FILE" --continue_on_error
+    python3 run_benchmark.py --config "$CONFIG_FILE" --continue_on_error $EXTRA_ARGS
 fi

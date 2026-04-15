@@ -31,8 +31,9 @@ CREATE TABLE IF NOT EXISTS runs (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     dataset           TEXT    NOT NULL,
     model             TEXT    NOT NULL,
+    window_size       REAL    NOT NULL,
+    rounds            INTEGER NOT NULL,
     window_idx        INTEGER NOT NULL,
-    window_size       REAL,
     window_start      REAL,
     window_end        REAL,
     seed              INTEGER NOT NULL,
@@ -46,7 +47,7 @@ CREATE TABLE IF NOT EXISTS runs (
     train_splits      INTEGER,
     round_idx         INTEGER,
 
-    UNIQUE(dataset, model, window_idx, seed)
+    UNIQUE(dataset, model, window_size, rounds, window_idx, seed)
 );
 
 CREATE TABLE IF NOT EXISTS metrics (
@@ -116,28 +117,30 @@ class BenchmarkDB:
         self,
         dataset: str,
         model: str,
+        window_size: float,
+        rounds: int,
         window_idx: int,
         seed: int,
-        window_size: Optional[float] = None,
         window_start: Optional[float] = None,
         window_end: Optional[float] = None,
     ) -> int:
         """Return the run id, creating the row if it does not exist.
 
-        New API uses window_idx instead of (benchmark_rounds, train_splits, round_idx).
+        New API uses (window_size, rounds, window_idx) instead of
+        (benchmark_rounds, train_splits, round_idx).
         """
         cur = self.conn.execute(
             "SELECT id FROM runs WHERE dataset=? AND model=? "
-            "AND window_idx=? AND seed=?",
-            (dataset, model, window_idx, seed),
+            "AND window_size=? AND rounds=? AND window_idx=? AND seed=?",
+            (dataset, model, window_size, rounds, window_idx, seed),
         )
         row = cur.fetchone()
         if row:
             return row[0]
         cur = self.conn.execute(
-            "INSERT INTO runs(dataset, model, window_idx, seed, "
-            "window_size, window_start, window_end) VALUES(?,?,?,?,?,?,?)",
-            (dataset, model, window_idx, seed, window_size, window_start, window_end),
+            "INSERT INTO runs(dataset, model, window_size, rounds, window_idx, seed, "
+            "window_start, window_end) VALUES(?,?,?,?,?,?,?,?)",
+            (dataset, model, window_size, rounds, window_idx, seed, window_start, window_end),
         )
         self.conn.commit()
         return cur.lastrowid
@@ -235,14 +238,17 @@ class BenchmarkDB:
         self,
         dataset: str,
         model: str,
+        window_size: float,
+        rounds: int,
         window_idx: int,
         seed: int,
     ) -> Optional[str]:
         """Return the status of a run, or None if it doesn't exist."""
         cur = self.conn.execute(
             "SELECT status FROM runs "
-            "WHERE dataset=? AND model=? AND window_idx=? AND seed=?",
-            (dataset, model, window_idx, seed),
+            "WHERE dataset=? AND model=? AND window_size=? AND rounds=? "
+            "AND window_idx=? AND seed=?",
+            (dataset, model, window_size, rounds, window_idx, seed),
         )
         row = cur.fetchone()
         return row[0] if row else None
@@ -251,11 +257,13 @@ class BenchmarkDB:
         self,
         dataset: str,
         model: str,
+        window_size: float,
+        rounds: int,
         window_idx: int,
         seed: int,
     ) -> bool:
         """Check if a run is already done."""
-        return self.run_status(dataset, model, window_idx, seed) == "done"
+        return self.run_status(dataset, model, window_size, rounds, window_idx, seed) == "done"
 
     def get_metrics(
         self,
@@ -309,14 +317,14 @@ class BenchmarkDB:
     def summary(self) -> str:
         """Human-readable summary of the database."""
         cur = self.conn.execute(
-            "SELECT dataset, model, benchmark_rounds, train_splits, status, COUNT(*) "
-            "FROM runs GROUP BY dataset, model, benchmark_rounds, train_splits, status "
-            "ORDER BY dataset, model"
+            "SELECT dataset, model, window_idx, status, COUNT(*) "
+            "FROM runs GROUP BY dataset, model, window_idx, status "
+            "ORDER BY dataset, model, window_idx"
         )
-        lines = ["dataset      | model         | m  | n  | status  | count"]
-        lines.append("-" * 64)
-        for ds, mdl, br, ts, st, cnt in cur:
-            lines.append(f"{ds:<12} | {mdl:<13} | {br:<2} | {ts:<2} | {st:<7} | {cnt}")
+        lines = ["dataset      | model         | win | status  | count"]
+        lines.append("-" * 60)
+        for ds, mdl, win, st, cnt in cur:
+            lines.append(f"{ds:<12} | {mdl:<13} | {win:<3} | {st:<7} | {cnt}")
         return "\n".join(lines)
 
     def reset_stale_running(self) -> int:
@@ -409,6 +417,44 @@ class BenchmarkDB:
             len(run_ids), dataset, model, benchmark_rounds, train_splits,
         )
         return len(run_ids)
+
+    def delete_run(
+        self,
+        dataset: str,
+        model: str,
+        window_size: float,
+        rounds: int,
+        window_idx: int,
+        seed: int,
+    ) -> bool:
+        """Delete a single run matching the exact unique key.
+
+        Returns:
+            True if a run was deleted, False if no matching run was found.
+        """
+        cur = self.conn.execute(
+            "SELECT id FROM runs WHERE dataset=? AND model=? "
+            "AND window_size=? AND rounds=? AND window_idx=? AND seed=?",
+            (dataset, model, window_size, rounds, window_idx, seed),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+
+        run_id = row[0]
+
+        # Delete related metrics and losses
+        self.conn.execute("DELETE FROM metrics WHERE run_id=?", (run_id,))
+        self.conn.execute("DELETE FROM losses WHERE run_id=?", (run_id,))
+        self.conn.execute("DELETE FROM runs WHERE id=?", (run_id,))
+        self.conn.commit()
+
+        logger.debug(
+            "Deleted run: dataset=%s, model=%s, window_size=%.2f, rounds=%d, "
+            "window_idx=%d, seed=%d",
+            dataset, model, window_size, rounds, window_idx, seed,
+        )
+        return True
 
     def delete_dataset_runs(self, dataset: str) -> int:
         """Delete all runs for a specific dataset.

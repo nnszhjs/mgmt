@@ -175,7 +175,7 @@ def _load_window_info(marker_path: str) -> list:
     windows_info = []
     with open(marker_path) as f:
         for line in f:
-            if line.startswith("window_"):
+            if line.startswith("window_") and ":" in line.split()[0]:
                 # Parse: window_0: 0.0000-0.4000 (12345 interactions)
                 parts = line.strip().split()
                 idx = int(parts[0].split("_")[1].rstrip(":"))
